@@ -14,97 +14,69 @@ Official Go SDK for the Enhanced Model Context Protocol (eMCP) - an enterprise-g
 ## Installation
 
 ```bash
-go get github.com/goco-ai/goda/sdk/go/emcp
+go get github.com/goco-ai/emcp-go
+```
+
+Or add to your go.work for local development:
+```bash
+use ./emcp-go
 ```
 
 ## Quick Start
 
-### Client Example
+### Server Example (Working Implementation)
 
 ```go
 package main
 
 import (
     "context"
+    "encoding/json"
     "log"
-    "github.com/goco-ai/goda/sdk/go/emcp"
+    "github.com/goco-ai/emcp-go/emcp"
+    "github.com/goco-ai/emcp-go/server"
 )
 
 func main() {
-    // Create client with stdio transport (MCP compatible)
-    transport := emcp.NewStdioTransport()
-    client, err := emcp.NewClient(&emcp.Options{
-        Transport:         transport,
-        EnableCheckpoints: true,
-    })
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer client.Close()
-    
-    // Initialize connection
-    ctx := context.Background()
-    if err := client.Initialize(ctx); err != nil {
-        log.Fatal(err)
-    }
-    
-    // Call tool with automatic checkpoint
-    result, err := client.CallToolWithCheckpoint(ctx, 
-        "risky_operation",
-        map[string]interface{}{"param": "value"},
-        "Before risky operation",
+    // Create server with middleware
+    srv := server.New(
+        "my-server",
+        "1.0.0",
+        server.WithMiddleware(server.LoggingMiddleware(log.Printf)),
     )
-    if err != nil {
-        log.Fatal(err)
-    }
-    
-    log.Printf("Result: %v", result)
-}
-```
 
-### Server Example
-
-```go
-package main
-
-import (
-    "context"
-    "log"
-    "github.com/goco-ai/goda/sdk/go/emcp"
-)
-
-func main() {
-    // Create server
-    transport := emcp.NewStdioTransport()
-    server, err := emcp.NewServer(&emcp.Options{
-        Transport:         transport,
-        EnableCheckpoints: true,
-    })
-    if err != nil {
-        log.Fatal(err)
-    }
-    
-    // Register tool
-    tool := emcp.Tool{
+    // Register a tool
+    tool := emcp.ToolDefinition{
         Name:        "echo",
-        Description: "Echo message",
-        RiskLevel:   emcp.RiskLow,
+        Description: "Echoes back the input message",
+        InputSchema: &emcp.JSONSchema{
+            Type: "object",
+            Properties: map[string]*emcp.SchemaProperty{
+                "message": {
+                    Type:        "string",
+                    Description: "Message to echo",
+                },
+            },
+            Required: []string{"message"},
+        },
+        RiskLevel: emcp.RiskLow,
     }
-    
-    server.RegisterTool(tool, func(ctx context.Context, args map[string]interface{}) (*emcp.CallToolResult, error) {
-        return &emcp.CallToolResult{
-            Content: []emcp.Content{{
-                Type: "text",
-                Text: args["message"].(string),
-            }},
-        }, nil
+
+    srv.AddTool(tool, func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+        var input struct {
+            Message string `json:"message"`
+        }
+        if err := json.Unmarshal(params, &input); err != nil {
+            return nil, err
+        }
+
+        result := map[string]string{"echo": input.Message}
+        return json.Marshal(result)
     })
-    
-    // Start server
-    ctx := context.Background()
-    if err := server.Start(ctx); err != nil {
-        log.Fatal(err)
-    }
+
+    // Start stdio transport (MCP compatible)
+    transport := server.NewStdioTransport(srv)
+    log.Fatal(transport.Serve())
 }
 ```
 
