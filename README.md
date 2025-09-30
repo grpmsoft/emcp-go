@@ -80,6 +80,54 @@ func main() {
 }
 ```
 
+### Client Example (Working Implementation)
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+    "github.com/goco-ai/emcp-go/client"
+)
+
+func main() {
+    // Create stdio transport (launches server subprocess)
+    transport, err := client.NewStdioTransport("./server.exe")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer transport.Close()
+
+    // Create client
+    c := client.New(transport)
+    defer c.Close()
+
+    ctx := context.Background()
+
+    // Initialize connection
+    if err := c.Initialize(ctx); err != nil {
+        log.Fatal(err)
+    }
+
+    // List available tools
+    tools, _ := c.ListTools(ctx)
+    log.Printf("Available tools: %d", len(tools))
+
+    // Call a tool
+    result, err := c.CallTool(ctx, "echo", map[string]any{
+        "message": "Hello from client!",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    log.Printf("Result: %s", result)
+}
+```
+
+See `examples/client-demo/` for full CLI example with JSON output support.
+
 ## Core Concepts
 
 ### Checkpoints
