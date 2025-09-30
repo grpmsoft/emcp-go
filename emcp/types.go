@@ -285,3 +285,48 @@ const RiskLevelHigh = RiskHigh
 
 // Deprecated: Use RiskCritical instead
 const RiskLevelCritical = RiskCritical
+
+// JSON-RPC version constant
+const JSONRPCVersion = "2.0"
+
+// ClientInfo contains client metadata
+type ClientInfo struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+// ServerCapabilities is an alias for Capabilities
+type ServerCapabilities = Capabilities
+
+// InitializeRequest represents MCP initialization request
+type InitializeRequest struct {
+	JSONRPC string `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id"`
+	Method  string `json:"method"`
+	Params  struct {
+		ProtocolVersion string     `json:"protocolVersion"`
+		ClientInfo      ClientInfo `json:"clientInfo"`
+		Capabilities    Capabilities `json:"capabilities"`
+	} `json:"params"`
+}
+
+// InitializeResult represents MCP initialization response
+type InitializeResult struct {
+	ProtocolVersion string         `json:"protocolVersion"`
+	ServerInfo      ServerInfo     `json:"serverInfo"`
+	Capabilities    Capabilities   `json:"capabilities"`
+}
+
+// ErrorDetail represents JSON-RPC error details
+type ErrorDetail struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
+}
+
+// JSONRPCErrorResponse represents a JSON-RPC error response
+type JSONRPCErrorResponse struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id"`
+	Error   ErrorDetail     `json:"error"`
+}
