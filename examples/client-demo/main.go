@@ -3,7 +3,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"flag"
 	"fmt"
 	"log"
@@ -162,7 +162,7 @@ func main() {
 			// Pretty print JSON
 			var prettyResult any
 			if err := json.Unmarshal(result, &prettyResult); err == nil {
-				prettyJSON, _ := json.MarshalIndent(prettyResult, "  ", "  ")
+				prettyJSON, _ := json.Marshal(prettyResult)
 				fmt.Printf("  %s\n", string(prettyJSON))
 			} else {
 				fmt.Printf("  %s\n", string(result))
@@ -198,7 +198,7 @@ func main() {
 }
 
 func outputJSON(data any) {
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	enc.Encode(data)
+	result, _ := json.Marshal(data)
+	os.Stdout.Write(result)
+	os.Stdout.Write([]byte("\n"))
 }

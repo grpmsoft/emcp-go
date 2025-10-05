@@ -3,7 +3,6 @@ package client
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -63,7 +62,7 @@ func NewStdioTransportWithStreams(stdin io.WriteCloser, stdout io.ReadCloser) *S
 }
 
 // Send writes a JSON-RPC message to stdin
-func (t *StdioTransport) Send(msg json.RawMessage) error {
+func (t *StdioTransport) Send(msg []byte) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -79,7 +78,7 @@ func (t *StdioTransport) Send(msg json.RawMessage) error {
 }
 
 // Receive reads a JSON-RPC message from stdout
-func (t *StdioTransport) Receive() (json.RawMessage, error) {
+func (t *StdioTransport) Receive() ([]byte, error) {
 	// Read one line (blocking)
 	line, err := t.reader.ReadBytes('\n')
 	if err != nil {
@@ -89,7 +88,7 @@ func (t *StdioTransport) Receive() (json.RawMessage, error) {
 		return nil, fmt.Errorf("failed to read message: %w", err)
 	}
 
-	return json.RawMessage(line), nil
+	return line, nil
 }
 
 // Close terminates the transport and subprocess

@@ -4,7 +4,7 @@ package client
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -36,14 +36,14 @@ type Client struct {
 
 // Transport defines the interface for client transports
 type Transport interface {
-	Send(msg json.RawMessage) error
-	Receive() (json.RawMessage, error)
+	Send(msg []byte) error
+	Receive() ([]byte, error)
 	Close() error
 }
 
 // response represents a pending call response
 type response struct {
-	result json.RawMessage
+	result []byte
 	err    error
 }
 
@@ -196,7 +196,7 @@ func (c *Client) ListTools(ctx context.Context) ([]emcp.ToolDefinition, error) {
 }
 
 // CallTool executes a tool on the server
-func (c *Client) CallTool(ctx context.Context, name string, arguments any) (json.RawMessage, error) {
+func (c *Client) CallTool(ctx context.Context, name string, arguments any) ([]byte, error) {
 	c.mu.RLock()
 	if !c.initialized {
 		c.mu.RUnlock()
@@ -316,11 +316,11 @@ func (c *Client) handleResponses() {
 }
 
 // processMessage handles a single incoming message
-func (c *Client) processMessage(data json.RawMessage) {
+func (c *Client) processMessage(data []byte) {
 	var base struct {
 		JSONRPC string          `json:"jsonrpc"`
-		ID      json.RawMessage `json:"id,omitempty"`
-		Result  json.RawMessage `json:"result,omitempty"`
+		ID      any    `json:"id,omitempty"`
+		Result  []byte `json:"result,omitempty"`
 		Error   *struct {
 			Code    int    `json:"code"`
 			Message string `json:"message"`
@@ -335,10 +335,8 @@ func (c *Client) processMessage(data json.RawMessage) {
 
 	// Convert ID to string
 	var idStr string
-	if len(base.ID) > 0 {
-		var id any
-		json.Unmarshal(base.ID, &id)
-		idStr = fmt.Sprintf("%v", id)
+	if base.ID != nil {
+		idStr = fmt.Sprintf("%v", base.ID)
 	}
 
 	// Find pending call

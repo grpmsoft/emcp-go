@@ -4,7 +4,7 @@ package emcp
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"time"
 )
 
@@ -191,7 +191,7 @@ type Request struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      interface{}     `json:"id"`
 	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params,omitempty"`
+	Params  []byte `json:"params,omitempty"`
 }
 
 // Response represents JSON-RPC 2.0 response.
@@ -301,7 +301,7 @@ type ServerCapabilities = Capabilities
 // InitializeRequest represents MCP initialization request
 type InitializeRequest struct {
 	JSONRPC string `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id"`
+	ID      any    `json:"id"`
 	Method  string `json:"method"`
 	Params  struct {
 		ProtocolVersion string     `json:"protocolVersion"`
@@ -327,6 +327,6 @@ type ErrorDetail struct {
 // JSONRPCErrorResponse represents a JSON-RPC error response
 type JSONRPCErrorResponse struct {
 	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id"`
+	ID      any    `json:"id"`
 	Error   ErrorDetail     `json:"error"`
 }

@@ -3,7 +3,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -11,7 +10,7 @@ import (
 // LoggingMiddleware logs tool calls with execution time
 func LoggingMiddleware(logger func(format string, args ...any)) ToolMiddleware {
 	return func(next ToolHandler) ToolHandler {
-		return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		return func(ctx context.Context, params []byte) ([]byte, error) {
 			start := time.Now()
 			result, err := next(ctx, params)
 			duration := time.Since(start)
@@ -38,7 +37,7 @@ type RiskPolicy struct {
 // RiskAssessmentMiddleware creates middleware for risk assessment
 func RiskAssessmentMiddleware(policy RiskPolicy) ToolMiddleware {
 	return func(next ToolHandler) ToolHandler {
-		return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		return func(ctx context.Context, params []byte) ([]byte, error) {
 			// Risk assessment logic would go here
 			// For now, just pass through
 			return next(ctx, params)
@@ -49,7 +48,7 @@ func RiskAssessmentMiddleware(policy RiskPolicy) ToolMiddleware {
 // RecoveryMiddleware recovers from panics in tool handlers
 func RecoveryMiddleware(logger func(format string, args ...any)) ToolMiddleware {
 	return func(next ToolHandler) ToolHandler {
-		return func(ctx context.Context, params json.RawMessage) (result json.RawMessage, err error) {
+		return func(ctx context.Context, params []byte) (result []byte, err error) {
 			defer func() {
 				if r := recover(); r != nil {
 					err = fmt.Errorf("panic recovered: %v", r)
@@ -67,12 +66,12 @@ func RecoveryMiddleware(logger func(format string, args ...any)) ToolMiddleware 
 // TimeoutMiddleware enforces timeout on tool execution
 func TimeoutMiddleware(timeout time.Duration) ToolMiddleware {
 	return func(next ToolHandler) ToolHandler {
-		return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		return func(ctx context.Context, params []byte) ([]byte, error) {
 			ctx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 
 			type result struct {
-				data json.RawMessage
+				data []byte
 				err  error
 			}
 
@@ -101,7 +100,7 @@ type Metrics struct {
 
 func MetricsMiddleware(metrics *Metrics) ToolMiddleware {
 	return func(next ToolHandler) ToolHandler {
-		return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		return func(ctx context.Context, params []byte) ([]byte, error) {
 			start := time.Now()
 			metrics.TotalCalls++
 

@@ -1,7 +1,7 @@
 package emcp
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 )
 
@@ -181,7 +181,7 @@ func TestJSONRPCRequest_JSON(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      "test-123",
 		Method:  "tools/list",
-		Params:  json.RawMessage(`{}`),
+		Params:  []byte(`{}`),
 	}
 
 	// Marshal

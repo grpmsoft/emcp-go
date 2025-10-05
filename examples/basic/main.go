@@ -3,7 +3,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log"
 	"os"
@@ -43,7 +43,7 @@ func main() {
 		RiskLevel: emcp.RiskLow,
 	}
 
-	err := srv.AddTool(echoTool, func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	err := srv.AddTool(echoTool, func(ctx context.Context, params []byte) ([]byte, error) {
 		var input struct {
 			Message string `json:"message"`
 		}
@@ -76,7 +76,7 @@ func main() {
 		RiskLevel: emcp.RiskLow,
 	}
 
-	err = srv.AddTool(calcTool, func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+	err = srv.AddTool(calcTool, func(ctx context.Context, params []byte) ([]byte, error) {
 		var input struct {
 			A float64 `json:"a"`
 			B float64 `json:"b"`

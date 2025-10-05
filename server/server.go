@@ -4,7 +4,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -35,7 +34,7 @@ type toolEntry struct {
 }
 
 // ToolHandler handles tool execution
-type ToolHandler func(ctx context.Context, params json.RawMessage) (json.RawMessage, error)
+type ToolHandler func(ctx context.Context, params []byte) ([]byte, error)
 
 // ToolMiddleware wraps a ToolHandler for cross-cutting concerns
 type ToolMiddleware func(ToolHandler) ToolHandler
@@ -138,7 +137,7 @@ func (s *Server) ListTools(ctx context.Context) ([]emcp.ToolDefinition, error) {
 }
 
 // CallTool executes a tool by name
-func (s *Server) CallTool(ctx context.Context, name string, params json.RawMessage) (json.RawMessage, error) {
+func (s *Server) CallTool(ctx context.Context, name string, params []byte) ([]byte, error) {
 	s.toolsMu.RLock()
 	entry, exists := s.tools[name]
 	s.toolsMu.RUnlock()

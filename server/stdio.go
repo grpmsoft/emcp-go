@@ -4,7 +4,7 @@ package server
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"os"
@@ -71,7 +71,7 @@ func (t *StdioTransport) Serve() error {
 func (t *StdioTransport) handleMessage(ctx context.Context, data []byte) {
 	var base struct {
 		JSONRPC string          `json:"jsonrpc"`
-		ID      json.RawMessage `json:"id,omitempty"`
+		ID      any    `json:"id,omitempty"`
 		Method  string          `json:"method"`
 	}
 
@@ -96,7 +96,7 @@ func (t *StdioTransport) handleMessage(ctx context.Context, data []byte) {
 }
 
 // handleInitialize handles initialization request
-func (t *StdioTransport) handleInitialize(ctx context.Context, id json.RawMessage, data []byte) {
+func (t *StdioTransport) handleInitialize(ctx context.Context, id any, data []byte) {
 	var req emcp.InitializeRequest
 	if err := json.Unmarshal(data, &req); err != nil {
 		t.sendError(id, emcp.ErrCodeInvalidParams, "invalid params: "+err.Error())
@@ -119,7 +119,7 @@ func (t *StdioTransport) handleInitialize(ctx context.Context, id json.RawMessag
 }
 
 // handleToolsList handles tools/list request
-func (t *StdioTransport) handleToolsList(ctx context.Context, id json.RawMessage) {
+func (t *StdioTransport) handleToolsList(ctx context.Context, id any) {
 	tools, err := t.server.ListTools(ctx)
 	if err != nil {
 		t.sendError(id, emcp.ErrCodeInternal, "failed to list tools: "+err.Error())
@@ -136,14 +136,14 @@ func (t *StdioTransport) handleToolsList(ctx context.Context, id json.RawMessage
 }
 
 // handleToolsCall handles tools/call request
-func (t *StdioTransport) handleToolsCall(ctx context.Context, id json.RawMessage, data []byte) {
+func (t *StdioTransport) handleToolsCall(ctx context.Context, id any, data []byte) {
 	var req struct {
 		JSONRPC string `json:"jsonrpc"`
-		ID      json.RawMessage `json:"id"`
+		ID      any    `json:"id"`
 		Method  string `json:"method"`
 		Params  struct {
 			Name      string          `json:"name"`
-			Arguments json.RawMessage `json:"arguments"`
+			Arguments []byte `json:"arguments"`
 		} `json:"params"`
 	}
 
@@ -161,12 +161,12 @@ func (t *StdioTransport) handleToolsCall(ctx context.Context, id json.RawMessage
 	resp := struct {
 		Content []struct {
 			Type string          `json:"type"`
-			Text json.RawMessage `json:"text"`
+			Text []byte `json:"text"`
 		} `json:"content"`
 	}{
 		Content: []struct {
 			Type string          `json:"type"`
-			Text json.RawMessage `json:"text"`
+			Text []byte `json:"text"`
 		}{
 			{
 				Type: "text",
@@ -179,12 +179,12 @@ func (t *StdioTransport) handleToolsCall(ctx context.Context, id json.RawMessage
 }
 
 // handlePing handles ping request
-func (t *StdioTransport) handlePing(ctx context.Context, id json.RawMessage) {
+func (t *StdioTransport) handlePing(ctx context.Context, id any) {
 	t.sendResult(id, map[string]any{})
 }
 
 // sendResult sends a JSON-RPC success response
-func (t *StdioTransport) sendResult(id json.RawMessage, result any) {
+func (t *StdioTransport) sendResult(id any, result any) {
 	resp := emcp.JSONRPCResponse{
 		JSONRPC: emcp.JSONRPCVersion,
 		ID:      id,
@@ -195,7 +195,7 @@ func (t *StdioTransport) sendResult(id json.RawMessage, result any) {
 }
 
 // sendError sends a JSON-RPC error response
-func (t *StdioTransport) sendError(id json.RawMessage, code int, message string) {
+func (t *StdioTransport) sendError(id any, code int, message string) {
 	resp := emcp.JSONRPCErrorResponse{
 		JSONRPC: emcp.JSONRPCVersion,
 		ID:      id,
