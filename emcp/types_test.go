@@ -14,7 +14,7 @@ func TestRiskLevel_String(t *testing.T) {
 		{RiskLevelMedium, "medium"},
 		{RiskLevelHigh, "high"},
 		{RiskLevelCritical, "critical"},
-		{RiskLevel(99), "unknown"},
+		{RiskLevel("invalid"), "unknown"},
 	}
 
 	for _, tt := range tests {

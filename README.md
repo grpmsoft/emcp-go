@@ -13,6 +13,10 @@ Official Go SDK for the Enhanced Model Context Protocol (eMCP) - an enterprise-g
 
 ## Installation
 
+**Requirements:**
+- Go 1.25+ (required for json/v2 support)
+- `GOEXPERIMENT=jsonv2` environment variable
+
 ```bash
 go get github.com/goco-ai/emcp-go
 ```
@@ -21,6 +25,8 @@ Or add to your go.work for local development:
 ```bash
 use ./emcp-go
 ```
+
+**Note:** eMCP-go uses Go's `encoding/json/v2` package which requires Go 1.25+ and the `GOEXPERIMENT=jsonv2` flag. JSON v2 will become stable in Go 1.26 (February 2026).
 
 ## Quick Start
 
@@ -31,7 +37,7 @@ package main
 
 import (
     "context"
-    "encoding/json"
+    "encoding/json/v2"
     "log"
     "github.com/goco-ai/emcp-go/emcp"
     "github.com/goco-ai/emcp-go/server"
@@ -62,7 +68,7 @@ func main() {
         RiskLevel: emcp.RiskLow,
     }
 
-    srv.AddTool(tool, func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+    srv.AddTool(tool, func(ctx context.Context, params []byte) ([]byte, error) {
         var input struct {
             Message string `json:"message"`
         }
@@ -246,9 +252,9 @@ type Transport interface {
 
 ## Compatibility
 
-| eMCP Version | MCP Version | Go Version |
-|--------------|-------------|------------|
-| 0.1.x | 1.0 | 1.19+ |
+| eMCP Version | MCP Version | Go Version | Notes |
+|--------------|-------------|------------|-------|
+| 0.1.x | 1.0 | 1.25+ | Requires `GOEXPERIMENT=jsonv2` |
 
 ## Examples
 
