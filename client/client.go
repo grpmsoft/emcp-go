@@ -111,8 +111,10 @@ func (c *Client) Initialize(ctx context.Context) error {
 
 	// Send request
 	respCh := make(chan response, 1)
-	c.registerCall(req["id"].(string), respCh)
-	defer c.unregisterCall(req["id"].(string))
+	reqID := req["id"].(string)
+
+	c.registerCall(reqID, respCh)
+	defer c.unregisterCall(reqID)
 
 	if err := c.transport.Send(reqData); err != nil {
 		return fmt.Errorf("failed to send initialize: %w", err)
@@ -320,7 +322,7 @@ func (c *Client) processMessage(data []byte) {
 	var base struct {
 		JSONRPC string          `json:"jsonrpc"`
 		ID      any    `json:"id,omitempty"`
-		Result  []byte `json:"result,omitempty"`
+		Result  any `json:"result,omitempty"`
 		Error   *struct {
 			Code    int    `json:"code"`
 			Message string `json:"message"`
@@ -355,8 +357,16 @@ func (c *Client) processMessage(data []byte) {
 			err: fmt.Errorf("RPC error %d: %s", base.Error.Code, base.Error.Message),
 		}
 	} else {
-		respCh <- response{
-			result: base.Result,
+		// Marshal result back to bytes
+		resultBytes, err := json.Marshal(base.Result)
+		if err != nil {
+			respCh <- response{
+				err: fmt.Errorf("failed to marshal result: %w", err),
+			}
+		} else {
+			respCh <- response{
+				result: resultBytes,
+			}
 		}
 	}
 }
