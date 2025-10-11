@@ -175,18 +175,91 @@ Risk Levels:
 
 ### Transports
 
+eMCP-go supports multiple transport protocols for different use cases:
+
 #### stdio (MCP Default)
+Standard I/O transport for local integration and single-client scenarios.
+
+**Server:**
 ```go
-transport := emcp.NewStdioTransport()
+srv := server.New("my-server", "1.0.0")
+transport := server.NewStdioTransport(srv)
+transport.Serve()  // Reads from stdin, writes to stdout
 ```
 
-#### gRPC (High Performance)
+**Client:**
 ```go
-transport := emcp.NewGRPCTransport("localhost:8095")
+transport, _ := client.NewStdioTransport("./server.exe")
+c := client.New(transport)
+```
+
+**Use Cases:**
+- Claude Code CLI integration
+- Single-agent scenarios
+- MCP-compatible applications
+
+#### gRPC (High Performance) ⭐
+Protocol Buffers v3 over HTTP/2 for high-performance, low-latency communication.
+
+**Server:**
+```go
+srv := server.New("my-server", "1.0.0")
+transport := server.NewGRPCTransport(srv, ":50051",
+    server.WithVerbose(true))
+transport.Serve()
+```
+
+**Client:**
+```go
+transport, _ := client.NewGRPCTransport("localhost:50051")
+defer transport.Close()
+
+// Initialize and use
+info, _ := transport.Initialize(ctx, clientInfo)
+tools, _ := transport.ListTools(ctx)
+result, _ := transport.CallTool(ctx, "tool_name", args)
+```
+
+**Features:**
+- Binary serialization (3-5x faster than JSON)
+- Bidirectional streaming support
+- Type-safe API contracts (.proto definitions)
+- Built-in TLS/SSL support
+- HTTP/2 multiplexing and flow control
+
+**Use Cases:**
+- GOCO↔GODA integration
+- Microservices architecture
+- High-throughput scenarios
+- Production deployments
+
+**Production Example:**
+```go
+// Server with TLS
+creds, _ := credentials.NewServerTLSFromFile("cert.pem", "key.pem")
+transport := server.NewGRPCTransport(srv, ":50051",
+    server.WithTLS(creds),
+    server.WithVerbose(false))
+
+// Client with TLS
+creds := credentials.NewClientTLSFromFile("ca.pem", "")
+transport, _ := client.NewGRPCTransport("api.example.com:50051",
+    client.WithGRPCTLS(creds))
+```
+
+See [examples/grpc-demo](examples/grpc-demo/) for complete working example.
+
+#### HTTP (Multi-client)
+JSON-RPC 2.0 over HTTP for multiple clients and web applications.
+
+```go
+// Coming soon
+transport := emcp.NewHTTPTransport("http://localhost:8090")
 ```
 
 #### WebSocket (Real-time)
 ```go
+// Planned
 transport := emcp.NewWebSocketTransport("ws://localhost:8097")
 ```
 
@@ -259,8 +332,30 @@ type Transport interface {
 ## Examples
 
 See the [examples](examples/) directory for complete examples:
-- [Client Example](examples/client/main.go)
-- [Server Example](examples/server/main.go)
+
+### [Basic Example](examples/basic/)
+Minimal stdio server/client implementation. Good starting point for understanding eMCP.
+
+### [Client Demo](examples/client-demo/)
+CLI client with JSON output and tool execution. Shows stdio transport usage.
+
+### [gRPC Demo](examples/grpc-demo/) ⭐
+Complete gRPC server/client example with:
+- Binary Protocol Buffers serialization
+- Multiple tool implementations (echo, uppercase, add)
+- Production-ready configuration
+- TLS setup examples
+
+**Quick start:**
+```bash
+cd examples/grpc-demo
+
+# Terminal 1: Start server
+go run . server
+
+# Terminal 2: Run client
+go run . client
+```
 
 ## Contributing
 
