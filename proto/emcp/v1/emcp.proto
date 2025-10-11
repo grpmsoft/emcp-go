@@ -1,0 +1,431 @@
+// eMCP (Enhanced Model Context Protocol) v1
+// 100% compatible with MCP 2024-11-05 with enterprise extensions
+//
+// Copyright (c) 2025 GOCO.AI
+// Version: 0.1.0-alpha
+syntax = "proto3";
+
+package emcp.v1;
+
+option go_package = "github.com/goco-ai/emcp-go/proto/emcp/v1;emcpv1";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+// =============================================================================
+// Core eMCP Service
+// =============================================================================
+
+// EMCPService defines the Enhanced Model Context Protocol service.
+// All methods are compatible with MCP 2024-11-05 with optional extensions.
+service EMCPService {
+  // Core MCP Methods (Required)
+  rpc Initialize(InitializeRequest) returns (InitializeResponse);
+  rpc Ping(PingRequest) returns (PingResponse);
+
+  // Tool Methods (MCP Standard)
+  rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+  rpc CallTool(CallToolRequest) returns (CallToolResponse);
+
+  // Resource Methods (MCP Standard)
+  rpc ListResources(ListResourcesRequest) returns (ListResourcesResponse);
+  rpc ReadResource(ReadResourceRequest) returns (ReadResourceResponse);
+
+  // Prompt Methods (MCP Standard)
+  rpc ListPrompts(ListPromptsRequest) returns (ListPromptsResponse);
+  rpc GetPrompt(GetPromptRequest) returns (GetPromptResponse);
+
+  // Logging Methods (MCP Standard)
+  rpc SetLogLevel(SetLogLevelRequest) returns (SetLogLevelResponse);
+
+  // Notifications (MCP Standard - bidirectional streaming)
+  rpc Subscribe(stream NotificationRequest) returns (stream NotificationResponse);
+
+  // eMCP Extension: Checkpoints (Optional)
+  rpc CreateCheckpoint(CreateCheckpointRequest) returns (CreateCheckpointResponse);
+  rpc ListCheckpoints(ListCheckpointsRequest) returns (ListCheckpointsResponse);
+  rpc RestoreCheckpoint(RestoreCheckpointRequest) returns (RestoreCheckpointResponse);
+  rpc DeleteCheckpoint(DeleteCheckpointRequest) returns (DeleteCheckpointResponse);
+  rpc GetCheckpointInfo(GetCheckpointInfoRequest) returns (GetCheckpointInfoResponse);
+
+  // eMCP Extension: Sessions (Optional)
+  rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+  rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
+  rpc CloseSession(CloseSessionRequest) returns (CloseSessionResponse);
+}
+
+// =============================================================================
+// Core Types (MCP 2024-11-05 Compatible)
+// =============================================================================
+
+// ClientInfo contains client metadata (MCP standard).
+message ClientInfo {
+  string name = 1;
+  string version = 2;
+}
+
+// ServerInfo contains server metadata (MCP standard + eMCP extensions).
+message ServerInfo {
+  string name = 1;
+  string version = 2;
+  string protocol_version = 3; // MCP protocol version (e.g., "2024-11-05")
+
+  // eMCP extensions (optional, backward compatible)
+  string emcp_version = 4; // eMCP version (e.g., "0.1.0")
+  map<string, string> extensions = 5; // Available extensions
+}
+
+// Capabilities defines server/client capabilities (MCP standard).
+message Capabilities {
+  ToolsCapability tools = 1;
+  ResourcesCapability resources = 2;
+  PromptsCapability prompts = 3;
+  LoggingCapability logging = 4;
+
+  // eMCP extensions (optional)
+  google.protobuf.Struct experimental = 10;
+}
+
+message ToolsCapability {
+  bool list_changed = 1;
+}
+
+message ResourcesCapability {
+  bool subscribe = 1;
+  bool list_changed = 2;
+}
+
+message PromptsCapability {
+  bool list_changed = 1;
+}
+
+message LoggingCapability {
+  // Empty for now (MCP standard)
+}
+
+// =============================================================================
+// Initialize (MCP Standard)
+// =============================================================================
+
+message InitializeRequest {
+  string protocol_version = 1; // MCP protocol version
+  ClientInfo client_info = 2;
+  Capabilities capabilities = 3;
+}
+
+message InitializeResponse {
+  string protocol_version = 1;
+  ServerInfo server_info = 2;
+  Capabilities capabilities = 3;
+}
+
+// =============================================================================
+// Ping (MCP Standard)
+// =============================================================================
+
+message PingRequest {
+  // Empty
+}
+
+message PingResponse {
+  // Empty
+}
+
+// =============================================================================
+// Tools (MCP Standard + eMCP Extensions)
+// =============================================================================
+
+message ListToolsRequest {
+  // Empty for now
+}
+
+message ListToolsResponse {
+  repeated ToolDefinition tools = 1;
+}
+
+message ToolDefinition {
+  string name = 1;
+  string description = 2;
+  JSONSchema input_schema = 3;
+
+  // eMCP extensions (optional, backward compatible)
+  RiskLevel risk_level = 10;
+  bool requires_checkpoint = 11;
+  map<string, string> metadata = 12;
+}
+
+message JSONSchema {
+  string type = 1; // "object", "string", "number", etc.
+  map<string, SchemaProperty> properties = 2;
+  repeated string required = 3;
+  google.protobuf.Struct additional_properties = 4;
+}
+
+message SchemaProperty {
+  string type = 1;
+  string description = 2;
+  repeated string enum = 3;
+  string default_value = 4;
+  string format = 5;
+}
+
+message CallToolRequest {
+  string name = 1;
+  google.protobuf.Struct arguments = 2;
+
+  // eMCP extensions (optional)
+  bool create_checkpoint = 10;
+  string checkpoint_reason = 11;
+}
+
+message CallToolResponse {
+  repeated ContentItem content = 1;
+  bool is_error = 2;
+
+  // eMCP extensions (optional)
+  string checkpoint_id = 10;
+  RiskLevel actual_risk_level = 11;
+  google.protobuf.Duration execution_time = 12;
+  map<string, string> metadata = 13;
+}
+
+message ContentItem {
+  string type = 1; // "text", "image", "resource"
+  string text = 2;
+  string data = 3; // base64 encoded data
+  string mime_type = 4;
+  string uri = 5;
+}
+
+// =============================================================================
+// Resources (MCP Standard)
+// =============================================================================
+
+message ListResourcesRequest {
+  // Empty for now
+}
+
+message ListResourcesResponse {
+  repeated ResourceDefinition resources = 1;
+}
+
+message ResourceDefinition {
+  string uri = 1;
+  string name = 2;
+  string description = 3;
+  string mime_type = 4;
+  map<string, string> metadata = 5;
+}
+
+message ReadResourceRequest {
+  string uri = 1;
+}
+
+message ReadResourceResponse {
+  repeated ContentItem content = 1;
+}
+
+// =============================================================================
+// Prompts (MCP Standard)
+// =============================================================================
+
+message ListPromptsRequest {
+  // Empty for now
+}
+
+message ListPromptsResponse {
+  repeated PromptDefinition prompts = 1;
+}
+
+message PromptDefinition {
+  string name = 1;
+  string description = 2;
+  repeated PromptArgument arguments = 3;
+  map<string, string> metadata = 4;
+}
+
+message PromptArgument {
+  string name = 1;
+  string description = 2;
+  bool required = 3;
+}
+
+message GetPromptRequest {
+  string name = 1;
+  map<string, string> arguments = 2;
+}
+
+message GetPromptResponse {
+  string description = 1;
+  repeated PromptMessage messages = 2;
+}
+
+message PromptMessage {
+  string role = 1; // "user", "assistant", "system"
+  repeated ContentItem content = 2;
+}
+
+// =============================================================================
+// Logging (MCP Standard)
+// =============================================================================
+
+message SetLogLevelRequest {
+  LogLevel level = 1;
+}
+
+message SetLogLevelResponse {
+  // Empty
+}
+
+enum LogLevel {
+  LOG_LEVEL_UNSPECIFIED = 0;
+  LOG_LEVEL_DEBUG = 1;
+  LOG_LEVEL_INFO = 2;
+  LOG_LEVEL_NOTICE = 3;
+  LOG_LEVEL_WARNING = 4;
+  LOG_LEVEL_ERROR = 5;
+  LOG_LEVEL_CRITICAL = 6;
+  LOG_LEVEL_ALERT = 7;
+  LOG_LEVEL_EMERGENCY = 8;
+}
+
+// =============================================================================
+// Notifications (MCP Standard)
+// =============================================================================
+
+message NotificationRequest {
+  string method = 1;
+  google.protobuf.Struct params = 2;
+}
+
+message NotificationResponse {
+  string method = 1;
+  google.protobuf.Struct params = 2;
+}
+
+// =============================================================================
+// eMCP Extensions: Checkpoints
+// =============================================================================
+
+message CreateCheckpointRequest {
+  string description = 1;
+  repeated string tags = 2;
+  RiskLevel risk_level = 3;
+  map<string, string> metadata = 4;
+}
+
+message CreateCheckpointResponse {
+  string checkpoint_id = 1;
+  google.protobuf.Timestamp created_at = 2;
+}
+
+message ListCheckpointsRequest {
+  repeated string tags = 1; // Filter by tags
+  int32 limit = 2; // Max number to return
+  int32 offset = 3; // Pagination offset
+}
+
+message ListCheckpointsResponse {
+  repeated CheckpointInfo checkpoints = 1;
+  int32 total = 2;
+}
+
+message CheckpointInfo {
+  string id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  string description = 3;
+  repeated string tags = 4;
+  RiskLevel risk_level = 5;
+  bool can_restore = 6;
+  map<string, string> metadata = 7;
+}
+
+message RestoreCheckpointRequest {
+  string checkpoint_id = 1;
+}
+
+message RestoreCheckpointResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message DeleteCheckpointRequest {
+  string checkpoint_id = 1;
+}
+
+message DeleteCheckpointResponse {
+  bool success = 1;
+}
+
+message GetCheckpointInfoRequest {
+  string checkpoint_id = 1;
+}
+
+message GetCheckpointInfoResponse {
+  CheckpointInfo checkpoint = 1;
+}
+
+// =============================================================================
+// eMCP Extensions: Sessions
+// =============================================================================
+
+message CreateSessionRequest {
+  string description = 1;
+  map<string, string> metadata = 2;
+}
+
+message CreateSessionResponse {
+  string session_id = 1;
+  google.protobuf.Timestamp created_at = 2;
+}
+
+message GetSessionRequest {
+  string session_id = 1;
+}
+
+message GetSessionResponse {
+  SessionInfo session = 1;
+}
+
+message SessionInfo {
+  string id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp last_activity = 3;
+  string description = 4;
+  map<string, string> metadata = 5;
+}
+
+message CloseSessionRequest {
+  string session_id = 1;
+}
+
+message CloseSessionResponse {
+  bool success = 1;
+}
+
+// =============================================================================
+// eMCP Types
+// =============================================================================
+
+// RiskLevel for risk assessment (eMCP extension)
+enum RiskLevel {
+  RISK_LEVEL_UNSPECIFIED = 0;
+  RISK_LEVEL_UNKNOWN = 1;
+  RISK_LEVEL_LOW = 2;
+  RISK_LEVEL_MEDIUM = 3;
+  RISK_LEVEL_HIGH = 4;
+  RISK_LEVEL_CRITICAL = 5;
+}
+
+// =============================================================================
+// Error Handling
+// =============================================================================
+
+// Note: gRPC uses standard status codes. eMCP error codes are mapped:
+// - INVALID_ARGUMENT: Invalid params (-32602)
+// - NOT_FOUND: Method not found (-32601)
+// - INTERNAL: Internal error (-32603)
+// - FAILED_PRECONDITION: Risk assessment failed (-32000)
+// - PERMISSION_DENIED: Checkpoint required (-32001)
+// - RESOURCE_EXHAUSTED: Rate limit exceeded (-32002)

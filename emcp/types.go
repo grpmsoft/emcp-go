@@ -11,7 +11,7 @@ import (
 // Version constants following semantic versioning.
 const (
 	Version         = "0.1.0"
-	ProtocolVersion = "1.0.0" // MCP protocol version
+	ProtocolVersion = "2024-11-05" // MCP protocol version
 	EMCPVersion     = "0.1.0" // eMCP extensions version
 )
 
