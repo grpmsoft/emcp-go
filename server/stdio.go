@@ -4,6 +4,7 @@ package server
 import (
 	"bufio"
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
 	"io"
@@ -214,24 +215,9 @@ func (t *StdioTransport) handleToolsCall(ctx context.Context, id any, data []byt
 		return
 	}
 
-	resp := struct {
-		Content []struct {
-			Type string          `json:"type"`
-			Text []byte `json:"text"`
-		} `json:"content"`
-	}{
-		Content: []struct {
-			Type string          `json:"type"`
-			Text []byte `json:"text"`
-		}{
-			{
-				Type: "text",
-				Text: result,
-			},
-		},
-	}
-
-	t.sendResult(id, resp)
+	// Tool handler already returns complete CallToolResult JSON.
+	// Pass through as raw JSON to avoid double-wrapping.
+	t.sendResult(id, jsontext.Value(result))
 }
 
 // handlePing handles ping request
