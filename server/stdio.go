@@ -158,6 +158,7 @@ func (t *StdioTransport) handleInitialize(ctx context.Context, id any, data []by
 		ProtocolVersion: info.ProtocolVersion,
 		ServerInfo:      *info,
 		Capabilities:    info.Capabilities,
+		Instructions:    t.server.instructions,
 	}
 
 	t.sendResult(id, resp)

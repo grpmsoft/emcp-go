@@ -13,7 +13,8 @@ import (
 // Server implements an Enhanced MCP server with enterprise features.
 type Server struct {
 	// Configuration
-	info emcp.ServerInfo
+	info         emcp.ServerInfo
+	instructions string // MCP instructions injected into LLM system prompt
 
 	// Resource management
 	toolsMu   sync.RWMutex
@@ -47,6 +48,12 @@ type ShutdownHook func(ctx context.Context) error
 
 // Option configures a Server
 type Option func(*Server)
+
+// WithInstructions sets MCP instructions injected into LLM system prompt.
+// Use to guide agent behavior: which tools to prefer, when to fall back.
+func WithInstructions(instructions string) Option {
+	return func(s *Server) { s.instructions = instructions }
+}
 
 // New creates a new eMCP server with the given options
 func New(name, version string, opts ...Option) *Server {
