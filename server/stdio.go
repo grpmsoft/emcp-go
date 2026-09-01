@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/goco-ai/emcp-go/emcp"
@@ -122,8 +123,12 @@ func (t *StdioTransport) handleMessage(ctx context.Context, data []byte) {
 	case "ping":
 		t.handlePing(ctx, base.ID)
 	default:
-		log.Printf("[eMCP stdio] ERROR: Unknown method: %s", base.Method)
-		t.sendError(base.ID, emcp.ErrCodeMethodNotFound, "method not found: "+base.Method)
+		if strings.HasPrefix(base.Method, "notifications/") || base.ID == nil {
+			t.logf("Ignoring notification: %s", base.Method)
+		} else {
+			log.Printf("[eMCP stdio] ERROR: Unknown method: %s", base.Method)
+			t.sendError(base.ID, emcp.ErrCodeMethodNotFound, "method not found: "+base.Method)
+		}
 	}
 }
 
