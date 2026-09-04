@@ -55,6 +55,11 @@ func WithInstructions(instructions string) Option {
 	return func(s *Server) { s.instructions = instructions }
 }
 
+// GetInstructions returns the MCP instructions string.
+func (s *Server) GetInstructions() string {
+	return s.instructions
+}
+
 // New creates a new eMCP server with the given options
 func New(name, version string, opts ...Option) *Server {
 	s := &Server{
