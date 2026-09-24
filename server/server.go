@@ -1,5 +1,6 @@
-// Package server provides Enhanced MCP (Model Context Protocol) server implementations.
-// 100% backward compatible with MCP 1.0+ with enterprise extensions.
+// Deprecated: Package server is part of eMCP v0.1 and will be removed.
+// Use github.com/modelcontextprotocol/go-sdk/mcp for MCP server functionality,
+// and github.com/goco-ai/emcp-go/middleware for enterprise middleware.
 package server
 
 import (

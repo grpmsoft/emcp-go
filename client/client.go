@@ -1,5 +1,6 @@
-// Package client provides Enhanced MCP client implementations.
-// 100% backward compatible with MCP 1.0+ with enterprise extensions.
+// Deprecated: Package client is part of eMCP v0.1 and will be removed.
+// Use github.com/modelcontextprotocol/go-sdk/mcp for MCP client functionality,
+// and github.com/goco-ai/emcp-go/daemontx for daemon transport.
 package client
 
 import (

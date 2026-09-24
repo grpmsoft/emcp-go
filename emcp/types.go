@@ -1,5 +1,6 @@
-// Package emcp provides Enhanced Model Context Protocol implementation.
-// 100% compatible with Anthropic MCP 1.0+ with enterprise extensions.
+// Deprecated: Package emcp is part of eMCP v0.1 and will be removed.
+// Use github.com/modelcontextprotocol/go-sdk/mcp for MCP types,
+// and github.com/goco-ai/emcp-go/toolmeta for enterprise tool annotations.
 package emcp
 
 import (

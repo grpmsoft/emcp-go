@@ -1,372 +1,118 @@
-# eMCP Go SDK
+# eMCP — Enterprise MCP Extensions for Go
 
-Official Go SDK for the Enhanced Model Context Protocol (eMCP) - an enterprise-grade extension of MCP with checkpoint support, risk assessment, and multi-transport capabilities.
+Enterprise extensions for the [official MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk). Adds daemon integration, risk assessment, metrics, and enterprise middleware to standard MCP servers and clients.
 
-## Features
+## Architecture
 
-- ✅ **100% MCP Compatible** - Works with any MCP client/server
-- ✅ **Multiple Transports** - stdio (MCP), gRPC, WebSocket, HTTP
-- ✅ **Checkpoint System** - Time-travel debugging and state recovery
-- ✅ **Risk Assessment** - Automatic risk evaluation for operations
-- ✅ **Type Safety** - Full type definitions and compile-time checks
-- ✅ **Streaming Support** - Real-time notifications and updates
+eMCP is **not** a standalone MCP SDK. It builds on the official SDK maintained by Google:
 
-## Installation
-
-**Requirements:**
-- Go 1.25+ (required for json/v2 support)
-- `GOEXPERIMENT=jsonv2` environment variable
-
-```bash
-go get github.com/goco-ai/emcp-go
+```
+Your MCP Server / Client
+    │
+    ├── github.com/goco-ai/emcp-go/daemontx     ← Daemon transport
+    ├── github.com/goco-ai/emcp-go/middleware    ← Enterprise middleware
+    ├── github.com/goco-ai/emcp-go/toolmeta      ← Tool annotations
+    │
+    └── github.com/modelcontextprotocol/go-sdk   ← Official MCP SDK (core)
 ```
 
-Or add to your go.work for local development:
-```bash
-use ./emcp-go
-```
+## Packages
 
-**Note:** eMCP-go uses Go's `encoding/json/v2` package which requires Go 1.25+ and the `GOEXPERIMENT=jsonv2` flag. JSON v2 will become stable in Go 1.26 (February 2026).
+### `daemontx` — Daemon Transport
 
-## Quick Start
-
-### Server Example (Working Implementation)
+Connect to MCP servers running as local daemons with automatic port/token discovery.
 
 ```go
-package main
+import "github.com/goco-ai/emcp-go/daemontx"
 
-import (
-    "context"
-    "encoding/json/v2"
-    "log"
-    "github.com/goco-ai/emcp-go/emcp"
-    "github.com/goco-ai/emcp-go/server"
-)
-
-func main() {
-    // Create server with middleware
-    srv := server.New(
-        "my-server",
-        "1.0.0",
-        server.WithMiddleware(server.LoggingMiddleware(log.Printf)),
-    )
-
-    // Register a tool
-    tool := emcp.ToolDefinition{
-        Name:        "echo",
-        Description: "Echoes back the input message",
-        InputSchema: &emcp.JSONSchema{
-            Type: "object",
-            Properties: map[string]*emcp.SchemaProperty{
-                "message": {
-                    Type:        "string",
-                    Description: "Message to echo",
-                },
-            },
-            Required: []string{"message"},
-        },
-        RiskLevel: emcp.RiskLow,
-    }
-
-    srv.AddTool(tool, func(ctx context.Context, params []byte) ([]byte, error) {
-        var input struct {
-            Message string `json:"message"`
-        }
-        if err := json.Unmarshal(params, &input); err != nil {
-            return nil, err
-        }
-
-        result := map[string]string{"echo": input.Message}
-        return json.Marshal(result)
-    })
-
-    // Start stdio transport (MCP compatible)
-    transport := server.NewStdioTransport(srv)
-    log.Fatal(transport.Serve())
+transport := &daemontx.DaemonTransport{
+    PIDFilePath: "/path/to/workspace/.gode/gode.pid",
 }
-```
 
-### Client Example (Working Implementation)
+client := mcp.NewClient(&mcp.Implementation{Name: "my-client", Version: "1.0"}, nil)
+session, err := client.Connect(ctx, transport, nil)
 
-```go
-package main
-
-import (
-    "context"
-    "log"
-    "github.com/goco-ai/emcp-go/client"
-)
-
-func main() {
-    // Create stdio transport (launches server subprocess)
-    transport, err := client.NewStdioTransport("./server.exe")
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer transport.Close()
-
-    // Create client
-    c := client.New(transport)
-    defer c.Close()
-
-    ctx := context.Background()
-
-    // Initialize connection
-    if err := c.Initialize(ctx); err != nil {
-        log.Fatal(err)
-    }
-
-    // List available tools
-    tools, _ := c.ListTools(ctx)
-    log.Printf("Available tools: %d", len(tools))
-
-    // Call a tool
-    result, err := c.CallTool(ctx, "echo", map[string]any{
-        "message": "Hello from client!",
-    })
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    log.Printf("Result: %s", result)
-}
-```
-
-See `examples/client-demo/` for full CLI example with JSON output support.
-
-## Core Concepts
-
-### Checkpoints
-
-Checkpoints provide time-travel debugging capabilities:
-
-```go
-// Create checkpoint
-checkpoint, err := client.CreateCheckpoint(ctx, 
-    "Before database migration",
-    []string{"database", "migration"},
-)
-
-// Do risky operation...
-
-// If something goes wrong, restore
-if err != nil {
-    client.RestoreCheckpoint(ctx, checkpoint.ID)
-}
-```
-
-### Risk Assessment
-
-All operations have risk levels:
-
-```go
-tool := emcp.Tool{
-    Name:               "delete_data",
-    RiskLevel:         emcp.RiskHigh,
-    RequiresCheckpoint: true,  // Auto checkpoint
-}
-```
-
-Risk Levels:
-- `RiskLow` - Safe operations
-- `RiskMedium` - May modify state
-- `RiskHigh` - Significant changes
-- `RiskCritical` - Irreversible operations
-
-### Transports
-
-eMCP-go supports multiple transport protocols for different use cases:
-
-#### stdio (MCP Default)
-Standard I/O transport for local integration and single-client scenarios.
-
-**Server:**
-```go
-srv := server.New("my-server", "1.0.0")
-transport := server.NewStdioTransport(srv)
-transport.Serve()  // Reads from stdin, writes to stdout
-```
-
-**Client:**
-```go
-transport, _ := client.NewStdioTransport("./server.exe")
-c := client.New(transport)
-```
-
-**Use Cases:**
-- Claude Code CLI integration
-- Single-agent scenarios
-- MCP-compatible applications
-
-#### gRPC (High Performance) ⭐
-Protocol Buffers v3 over HTTP/2 for high-performance, low-latency communication.
-
-**Server:**
-```go
-srv := server.New("my-server", "1.0.0")
-transport := server.NewGRPCTransport(srv, ":50051",
-    server.WithVerbose(true))
-transport.Serve()
-```
-
-**Client:**
-```go
-transport, _ := client.NewGRPCTransport("localhost:50051")
-defer transport.Close()
-
-// Initialize and use
-info, _ := transport.Initialize(ctx, clientInfo)
-tools, _ := transport.ListTools(ctx)
-result, _ := transport.CallTool(ctx, "tool_name", args)
-```
-
-**Features:**
-- Binary serialization (3-5x faster than JSON)
-- Bidirectional streaming support
-- Type-safe API contracts (.proto definitions)
-- Built-in TLS/SSL support
-- HTTP/2 multiplexing and flow control
-
-**Use Cases:**
-- GOCO↔GODA integration
-- Microservices architecture
-- High-throughput scenarios
-- Production deployments
-
-**Production Example:**
-```go
-// Server with TLS
-creds, _ := credentials.NewServerTLSFromFile("cert.pem", "key.pem")
-transport := server.NewGRPCTransport(srv, ":50051",
-    server.WithTLS(creds),
-    server.WithVerbose(false))
-
-// Client with TLS
-creds := credentials.NewClientTLSFromFile("ca.pem", "")
-transport, _ := client.NewGRPCTransport("api.example.com:50051",
-    client.WithGRPCTLS(creds))
-```
-
-See [examples/grpc-demo](examples/grpc-demo/) for complete working example.
-
-#### HTTP (Multi-client)
-JSON-RPC 2.0 over HTTP for multiple clients and web applications.
-
-```go
-// Coming soon
-transport := emcp.NewHTTPTransport("http://localhost:8090")
-```
-
-#### WebSocket (Real-time)
-```go
-// Planned
-transport := emcp.NewWebSocketTransport("ws://localhost:8097")
-```
-
-## API Reference
-
-### Client Methods
-
-| Method | Description |
-|--------|-------------|
-| `Initialize(ctx)` | Connect to server |
-| `ListTools(ctx)` | Get available tools |
-| `CallTool(ctx, name, args)` | Execute tool |
-| `CallToolWithCheckpoint(ctx, name, args, reason)` | Execute with checkpoint |
-| `CreateCheckpoint(ctx, desc, tags)` | Manual checkpoint |
-| `RestoreCheckpoint(ctx, id)` | Restore state |
-| `ListResources(ctx)` | Get resources |
-| `ReadResource(ctx, uri)` | Read resource |
-
-### Server Methods
-
-| Method | Description |
-|--------|-------------|
-| `RegisterTool(tool, handler)` | Add tool |
-| `RegisterResource(uri, provider)` | Add resource |
-| `RegisterPrompt(prompt)` | Add prompt |
-| `Start(ctx)` | Start server |
-| `Stop()` | Stop server |
-
-## Advanced Features
-
-### Notifications
-
-Subscribe to real-time updates:
-
-```go
-client.OnNotification("tools/list_changed", func(method string, params json.RawMessage) {
-    log.Println("Tools updated!")
+// Use session — tools/list, tools/call, etc.
+result, err := session.CallTool(ctx, &mcp.CallToolParams{
+    Name:      "gode__search_symbols",
+    Arguments: map[string]any{"query": "SessionManager"},
 })
 ```
 
-### Context Helpers
+Features:
+- **PID file discovery** — reads port + bearer token from daemon's PID file
+- **Bearer auth** — injects `Authorization: Bearer <token>` via `http.RoundTripper`
+- **SSE disabled by default** — compatible with plain JSON-RPC daemon servers
+- **Test-friendly** — inject custom `*http.Client` for `httptest.NewServer` testing
 
-Add metadata to context:
+### `middleware` — Enterprise Middleware
 
-```go
-ctx = emcp.WithSession(ctx, "session-123")
-ctx = emcp.WithRiskLevel(ctx, emcp.RiskHigh)
-ctx = emcp.WithCheckpoint(ctx, "checkpoint-456")
-```
-
-### Custom Transports
-
-Implement the `Transport` interface:
+Production-grade middleware implementing the official SDK's `mcp.Middleware` interface.
 
 ```go
-type Transport interface {
-    Send(ctx context.Context, method string, params interface{}) (json.RawMessage, error)
-    SendNotification(ctx context.Context, method string, params interface{}) error
-    Close() error
-    OnNotification(handler NotificationHandler)
-}
+import "github.com/goco-ai/emcp-go/middleware"
+
+server := mcp.NewServer(impl, nil)
+
+server.AddReceivingMiddleware(
+    middleware.Recovery(logger),                           // catch panics
+    middleware.Metrics(recorder),                          // per-method timing
+    middleware.RiskGate(risks, middleware.MaxRisk(toolmeta.RiskMedium)),  // block high-risk tools
+    middleware.ToolTimeout(timeouts, 30*time.Second),      // per-tool deadlines
+)
 ```
 
-## Compatibility
+| Middleware | Purpose |
+|---|---|
+| **Recovery** | Catches panics, logs stack trace, returns JSON-RPC error |
+| **Metrics** | `MetricsRecorder` interface with `InMemoryRecorder` implementation |
+| **RiskGate** | Blocks tool calls above configured risk level |
+| **ToolTimeout** | Per-tool `context.WithTimeout` from configurable map |
 
-| eMCP Version | MCP Version | Go Version | Notes |
-|--------------|-------------|------------|-------|
-| 0.1.x | 1.0 | 1.25+ | Requires `GOEXPERIMENT=jsonv2` |
+### `toolmeta` — Tool Annotations
 
-## Examples
+Enterprise metadata for MCP tools, stored in `Tool.Meta` with `emcp:` namespace.
 
-See the [examples](examples/) directory for complete examples:
+```go
+import "github.com/goco-ai/emcp-go/toolmeta"
 
-### [Basic Example](examples/basic/)
-Minimal stdio server/client implementation. Good starting point for understanding eMCP.
+tool := &mcp.Tool{Name: "delete_database", Description: "Drop all tables"}
+toolmeta.SetRiskLevel(tool, toolmeta.RiskCritical)
+toolmeta.SetRequiresCheckpoint(tool, true)
 
-### [Client Demo](examples/client-demo/)
-CLI client with JSON output and tool execution. Shows stdio transport usage.
+// Later, in middleware or client code:
+level := toolmeta.GetRiskLevel(tool)           // RiskCritical
+needsCP := toolmeta.RequiresCheckpoint(tool)   // true
+```
 
-### [gRPC Demo](examples/grpc-demo/) ⭐
-Complete gRPC server/client example with:
-- Binary Protocol Buffers serialization
-- Multiple tool implementations (echo, uppercase, add)
-- Production-ready configuration
-- TLS setup examples
+Risk levels: `RiskLow`, `RiskMedium`, `RiskHigh`, `RiskCritical`.
 
-**Quick start:**
+## Installation
+
 ```bash
-cd examples/grpc-demo
-
-# Terminal 1: Start server
-go run . server
-
-# Terminal 2: Run client
-go run . client
+go get github.com/goco-ai/emcp-go@latest
 ```
 
-## Contributing
+Requires Go 1.27+.
 
-Contributions welcome! Please read our [Contributing Guide](CONTRIBUTING.md).
+## Testing
+
+```bash
+go test ./toolmeta/ ./middleware/ ./daemontx/ -count=1
+```
+
+38 tests across all packages. Integration tests use `mcp.NewInMemoryTransports()` and `httptest.NewServer` — no external services required.
+
+## Legacy Packages
+
+The `client/`, `server/`, and `emcp/` packages are from eMCP v0.1 and are **deprecated**. They will be removed in a future version. Use the official SDK directly for core MCP functionality.
+
+## Related Projects
+
+- [GODE](https://github.com/goco-ai/gode) — Headless Go IDE with 65 MCP tools (primary consumer)
+- [GOCO](https://github.com/goco-ai/goco) — MAP agent framework (uses daemontx for GODE connection)
+- [Official MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) — Core MCP implementation by Google
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file.
-
-## Links
-
-- [eMCP Specification](https://github.com/emcp-protocol/specification)
-- [MCP Documentation](https://modelcontextprotocol.io)
-- [GODA Project](https://github.com/goco-ai/goda)
+MIT
