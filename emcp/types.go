@@ -199,7 +199,7 @@ type Request struct {
 type Response struct {
 	JSONRPC string      `json:"jsonrpc"`
 	ID      interface{} `json:"id"`
-	Result  interface{} `json:"result,omitempty"`
+	Result  interface{} `json:"result"`
 	Error   *Error      `json:"error,omitempty"`
 }
 
