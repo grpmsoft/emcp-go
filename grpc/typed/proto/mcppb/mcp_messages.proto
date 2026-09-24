@@ -1,0 +1,94 @@
+// MCP protocol messages based on the Google canonical proto.
+// Source: https://github.com/nichochar/mcp-grpc-transport
+// Spec: https://modelcontextprotocol.io/specification/2026-07-28/
+
+syntax = "proto3";
+
+package mcppb;
+
+option go_package = "github.com/goco-ai/emcp-go/grpc/typed/proto/mcppb";
+
+import "google/protobuf/struct.proto";
+
+// Annotations for content items.
+message Annotations {
+  repeated Role audience = 1;
+  optional float priority = 2;
+  optional string last_modified = 3;
+}
+
+// Role indicates the sender of a message.
+enum Role {
+  ROLE_UNKNOWN = 0;
+  ROLE_USER = 1;
+  ROLE_ASSISTANT = 2;
+}
+
+// TextContent is a textual content item.
+message TextContent {
+  string text = 1;
+  Annotations annotations = 2;
+  google.protobuf.Struct metadata = 3;
+}
+
+// ImageContent contains binary image data.
+message ImageContent {
+  bytes data = 1;
+  string mime_type = 2;
+  Annotations annotations = 3;
+  google.protobuf.Struct metadata = 4;
+}
+
+// AudioContent contains binary audio data.
+message AudioContent {
+  bytes data = 1;
+  string mime_type = 2;
+  Annotations annotations = 3;
+  google.protobuf.Struct metadata = 4;
+}
+
+// ToolAnnotations describes tool behavior hints.
+message ToolAnnotations {
+  string title = 1;
+  bool read_only_hint = 2;
+  bool destructive_hint = 3;
+  bool idempotent_hint = 4;
+  bool open_world_hint = 5;
+}
+
+// Tool represents an MCP tool definition.
+message Tool {
+  string name = 1;
+  string title = 6;
+  string description = 2;
+  google.protobuf.Struct input_schema = 3;
+  google.protobuf.Struct output_schema = 5;
+  ToolAnnotations annotations = 4;
+}
+
+// ListToolsRequest is the request for ListTools RPC.
+message ListToolsRequest {}
+
+// ListToolsResponse is the response for ListTools RPC.
+message ListToolsResponse {
+  repeated Tool tools = 2;
+}
+
+// CallToolRequest is the request for CallTool RPC.
+message CallToolRequest {
+  string name = 1;
+  google.protobuf.Struct arguments = 2;
+}
+
+// CallToolResponse is the response for CallTool RPC.
+message CallToolResponse {
+  message Content {
+    // Exactly one of these fields will be populated.
+    TextContent text = 1;
+    ImageContent image = 2;
+    AudioContent audio = 3;
+  }
+  repeated Content content = 2;
+  google.protobuf.Struct structured_content = 3;
+  bool is_error = 4;
+}

@@ -1,0 +1,21 @@
+// MCP gRPC service with typed RPCs.
+// Based on the Google canonical proto for MCP-over-gRPC.
+// Each MCP method has its own RPC with native protobuf messages.
+
+syntax = "proto3";
+
+package mcppb;
+
+option go_package = "github.com/goco-ai/emcp-go/grpc/typed/proto/mcppb";
+
+import "grpc/typed/proto/mcppb/mcp_messages.proto";
+
+// Mcp is the typed gRPC service for MCP operations.
+// Each RPC corresponds to a specific MCP method with native protobuf types.
+service Mcp {
+  // ListTools returns all tools registered on the server.
+  rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+
+  // CallTool invokes a named tool with the given arguments.
+  rpc CallTool(CallToolRequest) returns (CallToolResponse);
+}
