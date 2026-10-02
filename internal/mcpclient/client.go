@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -56,6 +57,11 @@ type Client struct {
 	session *mcp.ClientSession
 	client  *mcp.Client
 	closed  bool
+
+	// done is closed when the current session ends (the session's Wait
+	// returns). Ping checks this channel to detect a dead session without
+	// spawning a new process or making a network call.
+	done chan struct{}
 }
 
 // New creates a new MCP client. The caller is responsible for resolving
@@ -107,6 +113,18 @@ func (c *Client) connect(ctx context.Context) error {
 		return fmt.Errorf("emcp: connect failed: %w", err)
 	}
 	c.session = session
+
+	// Start a goroutine that watches for session completion. When the
+	// session ends (child process dies, stream closes, server disconnect),
+	// the done channel is closed. Ping checks this to detect a dead session
+	// without spawning new processes or making network calls.
+	done := make(chan struct{})
+	c.done = done
+	go func() {
+		_ = session.Wait()
+		close(done)
+	}()
+
 	return nil
 }
 
@@ -280,7 +298,11 @@ func (c *Client) ListTools(ctx context.Context) (*mcp.ListToolsResult, error) {
 
 // CallTool invokes a tool by name with the given arguments and returns the
 // raw SDK CallToolResult. On transport errors (server restart, dead stream),
-// it invalidates the session and retries once with a fresh connection.
+// it invalidates the session. It retries once ONLY when the error indicates
+// the request could not have reached the server (connection refused, session
+// missing, connection closed before the call started). Mid-flight errors
+// (connection reset, broken pipe, EOF after the request was sent) are NOT
+// retried to prevent double-execution of non-idempotent tools.
 func (c *Client) CallTool(ctx context.Context, name string, args map[string]any) (*mcp.CallToolResult, error) {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
@@ -297,24 +319,27 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]any)
 	if err != nil {
 		if isTransportError(err) {
 			c.invalidateSession()
-			// Retry once: reconnect and try again. This handles the common
-			// case of a server restart where the first call discovers the
-			// dead session and the retry succeeds on the fresh one.
-			session2, err2 := c.ensureSession(ctx)
-			if err2 != nil {
-				return nil, fmt.Errorf("emcp: CallTool %q failed: %w", name, err)
-			}
-			result2, err2 := session2.CallTool(ctx, &mcp.CallToolParams{
-				Name:      name,
-				Arguments: args,
-			})
-			if err2 != nil {
-				if isTransportError(err2) {
-					c.invalidateSession()
+			// Retry once ONLY if the error proves the request never reached
+			// the server. Mid-flight errors (connection reset, broken pipe,
+			// EOF) could mean the server executed the tool but crashed before
+			// delivering the response -- retrying would double-execute.
+			if isRetryableError(err) {
+				session2, err2 := c.ensureSession(ctx)
+				if err2 != nil {
+					return nil, fmt.Errorf("emcp: CallTool %q failed: %w", name, err)
 				}
-				return nil, fmt.Errorf("emcp: CallTool %q failed: %w", name, err2)
+				result2, err2 := session2.CallTool(ctx, &mcp.CallToolParams{
+					Name:      name,
+					Arguments: args,
+				})
+				if err2 != nil {
+					if isTransportError(err2) {
+						c.invalidateSession()
+					}
+					return nil, fmt.Errorf("emcp: CallTool %q failed: %w", name, err2)
+				}
+				return result2, nil
 			}
-			return result2, nil
 		}
 		return nil, fmt.Errorf("emcp: CallTool %q failed: %w", name, err)
 	}
@@ -360,8 +385,23 @@ func (c *Client) Ping(ctx context.Context) error {
 // For HTTP and gRPC, we do a throw-away Connect+Close (one server/discover
 // round-trip) to verify the server is reachable.
 func (c *Client) pingViaDiscover(ctx context.Context) error {
-	// For stdio, the session itself is the proof of life. If the child
-	// process died, the next call will detect it via transport error.
+	// For ALL transports, check the done channel first. When the session
+	// has ended (child process died, stream closed, server disconnect),
+	// the done channel is closed by the watcher goroutine in connect().
+	c.mu.Lock()
+	done := c.done
+	c.mu.Unlock()
+	if done != nil {
+		select {
+		case <-done:
+			return fmt.Errorf("emcp: session closed")
+		default:
+		}
+	}
+
+	// For stdio, the done-channel check above is the only liveness probe.
+	// We must NOT call makeTransport() for stdio because it would spawn
+	// a new child process (B6 fix).
 	if c.config.Transport == TransportStdio {
 		return nil
 	}
@@ -462,6 +502,42 @@ func isTransportError(err error) bool {
 		if strings.Contains(msg, needle) {
 			return true
 		}
+	}
+
+	return false
+}
+
+// isRetryableError returns true only when the error proves the request never
+// reached the server. Only these errors are safe for automatic retry in
+// CallTool, because retrying a request that DID reach the server could
+// double-execute a non-idempotent tool (e.g., apply_patch).
+//
+// Mid-flight errors like "connection reset", "broken pipe", and EOF mean the
+// request may have been received and executed before the connection dropped.
+// Those are transport errors (session should be invalidated) but NOT retryable.
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// SDK sentinel errors that prove no request was processed.
+	if errors.Is(err, mcp.ErrSessionMissing) || errors.Is(err, mcp.ErrConnectionClosed) {
+		return true
+	}
+
+	// Connection refused: the server wasn't even listening.
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		if sysErr, ok := opErr.Err.(*os.SyscallError); ok {
+			if sysErr.Syscall == "connectex" || sysErr.Syscall == "connect" {
+				return true
+			}
+		}
+	}
+
+	// Fallback string check for "connection refused" across platforms.
+	if strings.Contains(err.Error(), "connection refused") {
+		return true
 	}
 
 	return false

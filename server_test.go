@@ -391,6 +391,165 @@ func TestServer_GRPCPing(t *testing.T) {
 
 // -- Integration Tests --
 
+// -- Auth Tests --
+
+func TestServer_GRPCAuth_Rejects(t *testing.T) {
+	srv := NewServer(ServerConfig{
+		Name:           "auth-test",
+		Version:        "0.1.0",
+		TokenValidator: StaticToken("s3cret"),
+	})
+	srv.AddTool("echo", "echoes", nil, func(_ context.Context, _ string, args map[string]any) (*ToolResult, error) {
+		msg, _ := args["msg"].(string)
+		return TextResult("echo: " + msg), nil
+	})
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// No GRPCAuthInterceptor registered -- auth must still be enforced
+	// inside GRPCHandler.Stream() itself.
+	grpcServer := grpc.NewServer()
+	emcpv1.RegisterMCPTransportServer(grpcServer, srv.GRPCHandler())
+	go func() { _ = grpcServer.Serve(lis) }()
+	t.Cleanup(grpcServer.Stop)
+
+	// Connect WITHOUT a bearer token.
+	client, err := NewClient(Config{
+		Endpoint:  lis.Addr().String(),
+		Transport: TransportGRPC,
+	})
+	if err == nil {
+		_ = client.Close()
+		t.Fatal("expected gRPC connection without token to fail, but it succeeded")
+	}
+	t.Logf("gRPC without token: %v", err)
+}
+
+func TestServer_GRPCAuth_Accepts(t *testing.T) {
+	srv := NewServer(ServerConfig{
+		Name:           "auth-test",
+		Version:        "0.1.0",
+		TokenValidator: StaticToken("s3cret"),
+	})
+	srv.AddTool("echo", "echoes", nil, func(_ context.Context, _ string, args map[string]any) (*ToolResult, error) {
+		msg, _ := args["msg"].(string)
+		return TextResult("echo: " + msg), nil
+	})
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// No GRPCAuthInterceptor -- relies on in-handler auth.
+	grpcServer := grpc.NewServer()
+	emcpv1.RegisterMCPTransportServer(grpcServer, srv.GRPCHandler())
+	go func() { _ = grpcServer.Serve(lis) }()
+	t.Cleanup(grpcServer.Stop)
+
+	// Connect WITH a valid bearer token.
+	client, err := NewClient(Config{
+		Endpoint:    lis.Addr().String(),
+		Transport:   TransportGRPC,
+		BearerToken: "s3cret",
+	})
+	if err != nil {
+		t.Fatalf("gRPC with valid token failed: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result, err := client.CallTool(ctx, "echo", map[string]any{"msg": "authed"})
+	if err != nil {
+		t.Fatalf("CallTool with valid token failed: %v", err)
+	}
+	if result.Content[0].Text != "echo: authed" {
+		t.Errorf("expected 'echo: authed', got %q", result.Content[0].Text)
+	}
+}
+
+func TestServer_HTTPAuth_Rejects(t *testing.T) {
+	srv := NewServer(ServerConfig{
+		Name:           "auth-test",
+		Version:        "0.1.0",
+		TokenValidator: StaticToken("s3cret"),
+	})
+	srv.AddTool("echo", "echoes", nil, func(_ context.Context, _ string, args map[string]any) (*ToolResult, error) {
+		msg, _ := args["msg"].(string)
+		return TextResult("echo: " + msg), nil
+	})
+
+	ts := httptest.NewServer(srv.HTTPHandler())
+	t.Cleanup(ts.Close)
+
+	// Connect WITHOUT a bearer token.
+	client, err := NewClient(Config{
+		Endpoint:  ts.URL,
+		Transport: TransportHTTP,
+	})
+	if err == nil {
+		_ = client.Close()
+		t.Fatal("expected HTTP connection without token to fail, but it succeeded")
+	}
+	t.Logf("HTTP without token: %v", err)
+}
+
+func TestServer_HTTPAuth_Accepts(t *testing.T) {
+	srv := NewServer(ServerConfig{
+		Name:           "auth-test",
+		Version:        "0.1.0",
+		TokenValidator: StaticToken("s3cret"),
+	})
+	srv.AddTool("echo", "echoes", nil, func(_ context.Context, _ string, args map[string]any) (*ToolResult, error) {
+		msg, _ := args["msg"].(string)
+		return TextResult("echo: " + msg), nil
+	})
+
+	ts := httptest.NewServer(srv.HTTPHandler())
+	t.Cleanup(ts.Close)
+
+	// Connect WITH a valid bearer token.
+	client, err := NewClient(Config{
+		Endpoint:    ts.URL,
+		Transport:   TransportHTTP,
+		BearerToken: "s3cret",
+	})
+	if err != nil {
+		t.Fatalf("HTTP with valid token failed: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result, err := client.CallTool(ctx, "echo", map[string]any{"msg": "authed"})
+	if err != nil {
+		t.Fatalf("CallTool with valid token failed: %v", err)
+	}
+	if result.Content[0].Text != "echo: authed" {
+		t.Errorf("expected 'echo: authed', got %q", result.Content[0].Text)
+	}
+}
+
+func TestStaticToken(t *testing.T) {
+	validate := StaticToken("my-token")
+	if !validate("my-token") {
+		t.Error("StaticToken rejected valid token")
+	}
+	if validate("wrong-token") {
+		t.Error("StaticToken accepted invalid token")
+	}
+	if validate("") {
+		t.Error("StaticToken accepted empty token")
+	}
+	if validate("my-toke") {
+		t.Error("StaticToken accepted prefix of valid token")
+	}
+}
+
 func TestServer_Integration(t *testing.T) {
 	srv := newTestServer(t)
 

@@ -5,6 +5,7 @@ package emcp
 
 import (
 	"context"
+	"crypto/subtle"
 	"net/http"
 	"strings"
 	"time"
@@ -87,6 +88,7 @@ func NewServer(cfg ServerConfig) *Server {
 			Instructions:   cfg.Instructions,
 			Stateless:      !cfg.Stateful,
 			SessionTimeout: cfg.SessionTimeout,
+			TokenValidator: cfg.TokenValidator,
 		}),
 		tokenValidator: cfg.TokenValidator,
 	}
@@ -199,6 +201,22 @@ func ErrorResult(msg string) *ToolResult {
 	return &ToolResult{
 		IsError: true,
 		Content: []ContentItem{{Type: "text", Text: msg}},
+	}
+}
+
+// StaticToken returns a TokenValidator function that compares the incoming
+// token against a fixed expected value using constant-time comparison.
+// This prevents timing side-channel attacks on the token.
+//
+// Usage:
+//
+//	srv := emcp.NewServer(emcp.ServerConfig{
+//	    TokenValidator: emcp.StaticToken("my-secret-token"),
+//	})
+func StaticToken(tok string) func(string) bool {
+	expected := []byte(tok)
+	return func(candidate string) bool {
+		return subtle.ConstantTimeCompare(expected, []byte(candidate)) == 1
 	}
 }
 

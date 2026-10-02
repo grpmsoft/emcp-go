@@ -72,6 +72,12 @@ type Config struct {
 	// SessionTimeout configures how long idle sessions survive before
 	// automatic cleanup. Zero means never expire (leaks sessions).
 	SessionTimeout time.Duration
+
+	// TokenValidator, when non-nil, is passed to the gRPC handler for
+	// built-in auth enforcement inside GRPCHandler.Stream(). This ensures
+	// gRPC auth works even when the consumer forgets to register the
+	// GRPCAuthInterceptor on the grpc.Server.
+	TokenValidator func(string) bool
 }
 
 // Server wraps an MCP server and provides a clean internal API for adding
@@ -172,12 +178,19 @@ func (s *Server) HTTPHandler() http.Handler {
 
 // GRPCHandler returns the gRPC handler for registering with a grpc.Server.
 // The handler is created lazily on first call and reused thereafter.
+// When Config.TokenValidator is set, the handler enforces bearer token
+// authentication inside Stream() itself (B8 fix).
 func (s *Server) GRPCHandler() *emcpgrpc.GRPCHandler {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.grpcHandler == nil {
-		s.grpcHandler = emcpgrpc.NewGRPCHandler(func() *mcp.Server { return s.mcpServer })
+		getServer := func() *mcp.Server { return s.mcpServer }
+		if s.config.TokenValidator != nil {
+			s.grpcHandler = emcpgrpc.NewGRPCHandlerWithAuth(getServer, s.config.TokenValidator)
+		} else {
+			s.grpcHandler = emcpgrpc.NewGRPCHandler(getServer)
+		}
 	}
 	return s.grpcHandler
 }
