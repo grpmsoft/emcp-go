@@ -129,10 +129,18 @@ func convertCallToolResult(r *mcp.CallToolResult) *ToolResult {
 	for _, c := range r.Content {
 		result.Content = append(result.Content, convertContent(c))
 	}
+	// Preserve StructuredContent if present.
+	if r.StructuredContent != nil {
+		if m, ok := r.StructuredContent.(map[string]any); ok {
+			result.StructuredContent = m
+		}
+	}
 	return result
 }
 
 // convertContent converts an SDK Content to our clean ContentItem.
+// All MCP content types are handled: text, image, audio, resource_link,
+// and embedded resource.
 func convertContent(c mcp.Content) ContentItem {
 	switch v := c.(type) {
 	case *mcp.TextContent:
@@ -152,6 +160,30 @@ func convertContent(c mcp.Content) ContentItem {
 			Data:     []byte(v.Data),
 			MIMEType: v.MIMEType,
 		}
+	case *mcp.ResourceLink:
+		return ContentItem{
+			Type:        "resource_link",
+			URI:         v.URI,
+			Name:        v.Name,
+			Title:       v.Title,
+			Description: v.Description,
+			MIMEType:    v.MIMEType,
+		}
+	case *mcp.EmbeddedResource:
+		item := ContentItem{
+			Type: "resource",
+		}
+		if v.Resource != nil {
+			item.URI = v.Resource.URI
+			item.MIMEType = v.Resource.MIMEType
+			item.Resource = &ResourceContents{
+				URI:      v.Resource.URI,
+				MIMEType: v.Resource.MIMEType,
+				Text:     v.Resource.Text,
+				Blob:     v.Resource.Blob,
+			}
+		}
+		return item
 	default:
 		return ContentItem{Type: "text"}
 	}

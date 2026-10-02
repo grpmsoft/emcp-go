@@ -69,7 +69,9 @@ func mcpToolToProto(t *mcp.Tool) (*mcppb.Tool, error) {
 		pt.OutputSchema = s
 	}
 
-	// Convert annotations.
+	// Convert annotations. Per the MCP spec, DestructiveHint and OpenWorldHint
+	// default to TRUE when absent (nil), while ReadOnlyHint and IdempotentHint
+	// default to FALSE.
 	if t.Annotations != nil {
 		pt.Annotations = &mcppb.ToolAnnotations{
 			Title:          t.Annotations.Title,
@@ -78,9 +80,13 @@ func mcpToolToProto(t *mcp.Tool) (*mcppb.Tool, error) {
 		}
 		if t.Annotations.DestructiveHint != nil {
 			pt.Annotations.DestructiveHint = *t.Annotations.DestructiveHint
+		} else {
+			pt.Annotations.DestructiveHint = true // spec default
 		}
 		if t.Annotations.OpenWorldHint != nil {
 			pt.Annotations.OpenWorldHint = *t.Annotations.OpenWorldHint
+		} else {
+			pt.Annotations.OpenWorldHint = true // spec default
 		}
 	}
 

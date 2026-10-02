@@ -95,14 +95,12 @@ func New(cfg Config) *Server {
 
 // AddTool registers a tool with the given handler. The inputSchema is passed
 // through to the SDK as-is (it must be a valid JSON Schema object, typically
-// map[string]any).
+// map[string]any). If the schema is nil or missing "type", it is normalized
+// to {"type": "object"} to prevent SDK panics.
 func (s *Server) AddTool(name, description string, inputSchema map[string]any, handler ToolHandler) {
-	// The SDK requires InputSchema to be non-nil. When the caller passes nil
-	// (tool accepts no arguments), use a minimal empty-object schema.
-	schema := any(inputSchema)
-	if inputSchema == nil {
-		schema = map[string]any{"type": "object"}
-	}
+	// The SDK requires InputSchema to have "type": "object". When the caller
+	// passes nil or a schema without "type", normalize it to prevent panics.
+	schema := normalizeSchema(inputSchema)
 
 	tool := &mcp.Tool{
 		Name:        name,
@@ -220,4 +218,22 @@ func toSDKContent(item ContentItem) mcp.Content {
 	default:
 		return &mcp.TextContent{Text: item.Text}
 	}
+}
+
+// normalizeSchema ensures the input schema has "type": "object" set.
+// The SDK panics if the schema is nil or missing the "type" field.
+func normalizeSchema(schema map[string]any) map[string]any {
+	if schema == nil {
+		return map[string]any{"type": "object"}
+	}
+	if _, hasType := schema["type"]; !hasType {
+		// Copy the map to avoid mutating the caller's original.
+		normalized := make(map[string]any, len(schema)+1)
+		for k, v := range schema {
+			normalized[k] = v
+		}
+		normalized["type"] = "object"
+		return normalized
+	}
+	return schema
 }

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -116,12 +117,38 @@ func (c *Client) makeTransport() (mcp.Transport, error) {
 	case TransportGRPC:
 		return c.makeGRPCTransport(), nil
 	case TransportAuto:
-		return c.makeHTTPTransport(), nil
+		return c.makeAutoTransport()
 	case TransportStdio:
-		return nil, fmt.Errorf("emcp: stdio transport not yet implemented")
+		return c.makeStdioTransport()
 	default:
 		return nil, fmt.Errorf("emcp: unknown transport %q", c.config.Transport)
 	}
+}
+
+// makeStdioTransport creates a CommandTransport for stdio-based MCP servers.
+func (c *Client) makeStdioTransport() (mcp.Transport, error) {
+	if c.config.Command == "" {
+		return nil, fmt.Errorf("emcp: stdio transport requires Command to be set")
+	}
+	return &mcp.CommandTransport{
+		Command: exec.Command(c.config.Command, c.config.Args...),
+	}, nil
+}
+
+// makeAutoTransport selects the transport based on the endpoint format:
+//   - starts with "http://" or "https://" -> HTTP
+//   - bare "host:port" (no scheme, no path) -> gRPC
+//   - default -> HTTP
+func (c *Client) makeAutoTransport() (mcp.Transport, error) {
+	ep := c.config.Endpoint
+	if strings.HasPrefix(ep, "http://") || strings.HasPrefix(ep, "https://") {
+		return c.makeHTTPTransport(), nil
+	}
+	// Bare host:port (contains ":" but no "/" indicating a path or scheme) -> gRPC.
+	if strings.Contains(ep, ":") && !strings.Contains(ep, "/") {
+		return c.makeGRPCTransport(), nil
+	}
+	return c.makeHTTPTransport(), nil
 }
 
 // makeHTTPTransport creates a StreamableClientTransport with optional bearer auth.
@@ -153,14 +180,36 @@ func (c *Client) makeHTTPTransport() *mcp.StreamableClientTransport {
 }
 
 // makeGRPCTransport creates a GRPCTransport for the configured endpoint.
+// When a BearerToken is configured, per-RPC credentials are injected so
+// the token is sent as "authorization: Bearer <token>" metadata on every
+// gRPC call.
 func (c *Client) makeGRPCTransport() *emcpgrpc.GRPCTransport {
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	}
+	if c.config.BearerToken != "" {
+		opts = append(opts, grpc.WithPerRPCCredentials(bearerCredentials{token: c.config.BearerToken}))
+	}
 	return &emcpgrpc.GRPCTransport{
-		Target: c.config.Endpoint,
-		DialOptions: []grpc.DialOption{
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-		},
+		Target:      c.config.Endpoint,
+		DialOptions: opts,
 	}
 }
+
+// bearerCredentials implements grpc credentials.PerRPCCredentials to inject
+// a Bearer token into the metadata of every gRPC call.
+type bearerCredentials struct {
+	token string
+}
+
+func (b bearerCredentials) GetRequestMetadata(_ context.Context, _ ...string) (map[string]string, error) {
+	return map[string]string{"authorization": "Bearer " + b.token}, nil
+}
+
+// RequireTransportSecurity returns false because the daemon use case runs
+// over plaintext loopback. In production deployments with TLS this is still
+// safe: TLS protects the token on the wire regardless of this flag.
+func (b bearerCredentials) RequireTransportSecurity() bool { return false }
 
 // ensureSession returns the active session, reconnecting if necessary.
 func (c *Client) ensureSession(ctx context.Context) (*mcp.ClientSession, error) {
@@ -235,7 +284,10 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]any)
 	return result, nil
 }
 
-// Ping sends a ping to the server to verify the connection is alive.
+// Ping verifies the server is alive. On MCP 2026-07-28 (stateless) servers,
+// the "ping" method is removed. In that case, Ping performs a throw-away
+// Connect+Close cycle (one server/discover POST) as a liveness probe.
+// On legacy (2025-11-25) servers, the SDK session.Ping is used directly.
 func (c *Client) Ping(ctx context.Context) error {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
@@ -245,12 +297,38 @@ func (c *Client) Ping(ctx context.Context) error {
 		return err
 	}
 
+	// Check the negotiated protocol version. On 2026-07-28+, ping is gone;
+	// use a lightweight server/discover round-trip instead.
+	if ir := session.InitializeResult(); ir != nil && ir.ProtocolVersion >= "2026-07-28" {
+		return c.pingViaDiscover(ctx)
+	}
+
 	if err := session.Ping(ctx, nil); err != nil {
 		if isTransportError(err) {
 			c.invalidateSession()
 		}
 		return fmt.Errorf("emcp: Ping failed: %w", err)
 	}
+	return nil
+}
+
+// pingViaDiscover performs a throw-away Connect+Close as a liveness check.
+// This sends a single server/discover POST and tears down the temporary
+// session immediately.
+func (c *Client) pingViaDiscover(ctx context.Context) error {
+	transport, err := c.makeTransport()
+	if err != nil {
+		return fmt.Errorf("emcp: Ping failed: %w", err)
+	}
+	probe := mcp.NewClient(
+		&mcp.Implementation{Name: "emcp-ping-probe", Version: "1.0.0"},
+		nil,
+	)
+	sess, err := probe.Connect(ctx, transport, nil)
+	if err != nil {
+		return fmt.Errorf("emcp: Ping failed: %w", err)
+	}
+	_ = sess.Close()
 	return nil
 }
 

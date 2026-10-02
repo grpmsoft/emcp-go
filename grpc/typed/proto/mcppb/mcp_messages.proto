@@ -4,7 +4,7 @@
 
 syntax = "proto3";
 
-package mcppb;
+package model_context_protocol;
 
 option go_package = "github.com/goco-ai/emcp-go/grpc/typed/proto/mcppb";
 

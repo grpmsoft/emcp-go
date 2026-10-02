@@ -31,10 +31,14 @@ type TypedMCPClient struct {
 // gRPC target. If no transport credentials are provided in opts, insecure
 // credentials are used by default.
 func NewTypedMCPClient(target string, opts ...grpc.DialOption) (*TypedMCPClient, error) {
-	if !hasTransportCredentials(opts) {
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// Always include insecure credentials as a baseline. User-supplied
+	// DialOptions are appended on top; if they set explicit credentials,
+	// the last-set wins per gRPC semantics.
+	allOpts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
-	conn, err := grpc.NewClient(target, opts...)
+	allOpts = append(allOpts, opts...)
+	conn, err := grpc.NewClient(target, allOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial gRPC target %q: %w", target, err)
 	}
@@ -94,13 +98,3 @@ func (c *TypedMCPClient) Close() error {
 	return nil
 }
 
-// hasTransportCredentials checks whether any of the dial options already
-// configure transport credentials.
-func hasTransportCredentials(opts []grpc.DialOption) bool {
-	for _, opt := range opts {
-		if opt != nil {
-			return true
-		}
-	}
-	return false
-}

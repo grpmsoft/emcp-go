@@ -61,10 +61,14 @@ func (t *GRPCTransport) Connect(ctx context.Context) (mcp.Connection, error) {
 		// Test path: use the injected connection.
 		grpcConn = t.conn
 	} else {
-		opts := t.DialOptions
-		if !hasTransportCredentials(opts) {
-			opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		// Always include insecure credentials as the base. User-supplied
+		// DialOptions (like WithUserAgent) are appended on top. If the
+		// caller explicitly sets transport credentials, the last one wins
+		// (gRPC uses the last-set credential option).
+		opts := []grpc.DialOption{
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		}
+		opts = append(opts, t.DialOptions...)
 		cc, err := grpc.NewClient(t.Target, opts...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to dial gRPC target %q: %w", t.Target, err)
@@ -161,19 +165,3 @@ func (c *ownedClientConn) Close() error {
 	return ccErr
 }
 
-// hasTransportCredentials checks whether any of the dial options already
-// configure transport credentials. This avoids double-applying insecure creds
-// when the caller has already set them.
-func hasTransportCredentials(opts []grpc.DialOption) bool {
-	// grpc.DialOption is an opaque interface — we cannot inspect its contents.
-	// A simple heuristic: if the caller passed any options at all, assume they
-	// know what they are doing. If they passed none, default to insecure.
-	// This is safe because grpc.NewClient requires credentials and will fail
-	// with a clear error if none are set.
-	for _, opt := range opts {
-		if opt != nil {
-			return true
-		}
-	}
-	return false
-}

@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/grpmsoft/emcp-go/grpc/typed/proto/mcppb"
@@ -93,15 +94,23 @@ func (h *TypedGRPCHandler) RemoveTools(names ...string) {
 }
 
 // ListTools implements mcppb.McpServer. It returns all registered tools
-// as proto Tool messages.
+// as proto Tool messages, sorted by name for deterministic output.
 func (h *TypedGRPCHandler) ListTools(_ context.Context, _ *mcppb.ListToolsRequest) (*mcppb.ListToolsResponse, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
+	// Collect names and sort for deterministic iteration order.
+	names := make([]string, 0, len(h.tools))
+	for name := range h.tools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
 	resp := &mcppb.ListToolsResponse{
 		Tools: make([]*mcppb.Tool, 0, len(h.tools)),
 	}
-	for _, rt := range h.tools {
+	for _, name := range names {
+		rt := h.tools[name]
 		pt, err := mcpToolToProto(rt.tool)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "converting tool %q: %v", rt.tool.Name, err)
