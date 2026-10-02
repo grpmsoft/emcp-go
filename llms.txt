@@ -1,0 +1,108 @@
+# emcp-go
+
+> Enterprise MCP Extensions for Go -- unified client+server library built on the official MCP Go SDK. gRPC bidirectional stream transport, PID file discovery, bearer auth.
+
+Module: github.com/grpmsoft/emcp-go
+Go: 1.27+
+License: Apache-2.0
+Organization: goco-ai (github.com/goco-ai)
+
+## Overview
+
+Thin extension layer on top of the official MCP Go SDK (github.com/modelcontextprotocol/go-sdk v1.8.0). Adds a unified client+server abstraction and gRPC transport. Does not reimplement MCP -- delegates all protocol work to the official SDK.
+
+Two capabilities: (1) Unified Client connecting via HTTP/gRPC/stdio with one NewClient call, with PID file auto-discovery for daemon-managed servers. (2) gRPC bidirectional stream transport for full-duplex MCP over gRPC.
+
+## API
+
+### Client
+
+- NewClient(Config) (*Client, error) -- eagerly connects
+- Client.ListTools(ctx) ([]*ToolInfo, error)
+- Client.CallTool(ctx, name, args) (*ToolResult, error)
+- Client.Ping(ctx) error
+- Client.Close() error
+
+### Config
+
+- Endpoint (string) -- HTTP URL or gRPC host:port
+- PIDFile (string) -- daemon PID file for auto-discovery (reads port + token)
+- Transport (Transport) -- TransportHTTP, TransportGRPC, TransportStdio, TransportAuto
+- Command / Args -- for stdio transport
+- BearerToken (string) -- HTTP auth; auto-read from PID file
+- Timeout (time.Duration) -- per-call timeout, 0 = none
+
+### Server
+
+- NewServer(ServerConfig) *Server
+- Server.AddTool(name, description, inputSchema, handler)
+- Server.HTTPHandler() http.Handler -- Streamable HTTP
+- Server.GRPCHandler() *grpc.GRPCHandler -- register with grpc.Server
+- Server.Close() error
+
+### ServerConfig
+
+- Name (string) -- server name in MCP initialize
+- Version (string) -- server version
+- Instructions (string) -- optional client instructions
+
+### ToolHandler
+
+func(ctx context.Context, name string, args map[string]any) (*ToolResult, error)
+
+### Result Types
+
+- ToolInfo -- Name, Title, Description, InputSchema
+- ToolResult -- Content []ContentItem, IsError bool
+- ContentItem -- Type (text/image/audio), Text, MIMEType, Data
+- TextResult(text) -- convenience: single text content item
+- ErrorResult(msg) -- convenience: text with IsError=true
+
+### PID File Discovery
+
+- DaemonInfo -- PID, Port, Name, Token
+- ReadPIDFile(path) (*DaemonInfo, error)
+- ErrPIDFileNotFound, ErrPIDFileEmpty -- sentinel errors
+
+### gRPC Transport (grpc/ package)
+
+- GRPCTransport -- implements mcp.Transport; client-side
+- GRPCHandler -- bridges gRPC stream to mcp.Server; server-side
+- Proto: MCPTransport.Stream(MCPMessage) -- JSON-RPC as opaque bytes in protobuf frames
+
+### Typed gRPC (grpc/typed/ package)
+
+- TypedClient -- MCP over typed gRPC RPCs (Initialize, Ping, ListTools, CallTool)
+- TypedServer -- bridges typed RPCs to mcp.Server
+- Proto: Google canonical proto for MCP-over-gRPC with native protobuf messages
+
+## File Structure
+
+```
+emcp.go         -- Client (NewClient, ListTools, CallTool, Ping, Close)
+server.go       -- Server (NewServer, AddTool, HTTPHandler, GRPCHandler)
+config.go       -- Config, Transport enum
+types.go        -- ToolInfo, ToolResult, ContentItem
+discovery.go    -- DaemonInfo, ReadPIDFile, sentinel errors
+grpc/
+  transport.go  -- GRPCTransport (mcp.Transport)
+  handler.go    -- GRPCHandler (gRPC stream -> mcp.Server)
+  connection.go -- grpcConnection (concurrent-safe mcp.Connection)
+  errors.go     -- ErrStreamClosed
+  proto/emcpv1/ -- MCPTransport protobuf service
+grpc/typed/
+  client.go     -- TypedClient
+  server.go     -- TypedServer
+  convert.go    -- protobuf <-> SDK conversions
+  proto/mcppb/  -- Google canonical proto
+internal/
+  mcpclient/    -- Client impl (session mgmt, reconnect, bearer auth)
+  mcpserver/    -- Server impl (tool dispatch, arg extraction)
+```
+
+## Links
+
+- [README](https://github.com/grpmsoft/emcp-go/blob/main/README.md)
+- [AGENTS.md](https://github.com/grpmsoft/emcp-go/blob/main/AGENTS.md)
+- [CONTRIBUTING.md](https://github.com/grpmsoft/emcp-go/blob/main/CONTRIBUTING.md)
+- [pkg.go.dev](https://pkg.go.dev/github.com/grpmsoft/emcp-go)

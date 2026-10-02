@@ -1,0 +1,24 @@
+// Copyright 2026 GOCO-AI. All rights reserved.
+// Use of this source code is governed by an MIT-style license.
+
+syntax = "proto3";
+
+package emcp.v1;
+
+option go_package = "github.com/goco-ai/emcp-go/grpc/proto/emcpv1";
+
+// MCPTransport provides a bidirectional streaming RPC for MCP communication.
+// Each MCPMessage wraps a serialized JSON-RPC message (request, response,
+// or notification) produced by jsonrpc.EncodeMessage.
+service MCPTransport {
+  // Stream opens a persistent bidirectional channel. Both sides send and
+  // receive MCPMessage frames for the lifetime of the MCP session.
+  rpc Stream(stream MCPMessage) returns (stream MCPMessage);
+}
+
+// MCPMessage carries a single JSON-RPC message as an opaque byte payload.
+// The payload is produced by jsonrpc.EncodeMessage and consumed by
+// jsonrpc.DecodeMessage — the gRPC layer never inspects its contents.
+message MCPMessage {
+  bytes payload = 1;
+}
