@@ -5,7 +5,7 @@
 Module: github.com/grpmsoft/emcp-go
 Go: 1.27+
 License: Apache-2.0
-Organization: goco-ai (github.com/goco-ai)
+Organization: grpmsoft (github.com/grpmsoft)
 
 ## Overview
 
@@ -72,9 +72,9 @@ func(ctx context.Context, name string, args map[string]any) (*ToolResult, error)
 
 ### Typed gRPC (grpc/typed/ package)
 
-- TypedClient -- MCP over typed gRPC RPCs (Initialize, Ping, ListTools, CallTool)
-- TypedServer -- bridges typed RPCs to mcp.Server
-- Proto: Google canonical proto for MCP-over-gRPC with native protobuf messages
+- TypedClient -- MCP over typed gRPC RPCs (ListTools, CallTool)
+- TypedServer -- standalone tool registry (2 of 8 RPCs implemented, 6 Unimplemented)
+- Proto: Google canonical proto (GoogleCloudPlatform/mcp-grpc-transport-proto@1d2216c), experimental
 
 ## File Structure
 

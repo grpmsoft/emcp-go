@@ -10,7 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -55,6 +57,11 @@ type Client struct {
 	session *mcp.ClientSession
 	client  *mcp.Client
 	closed  bool
+
+	// done is closed when the current session ends (the session's Wait
+	// returns). Ping checks this channel to detect a dead session without
+	// spawning a new process or making a network call.
+	done chan struct{}
 }
 
 // New creates a new MCP client. The caller is responsible for resolving
@@ -94,7 +101,7 @@ func New(cfg Config) (*Client, error) {
 	return c, nil
 }
 
-// connect establishes a new session. Caller must hold c.mu.
+// connect establishes a new session. Caller must hold c.mu or be in New().
 func (c *Client) connect(ctx context.Context) error {
 	transport, err := c.makeTransport()
 	if err != nil {
@@ -106,6 +113,18 @@ func (c *Client) connect(ctx context.Context) error {
 		return fmt.Errorf("emcp: connect failed: %w", err)
 	}
 	c.session = session
+
+	// Start a goroutine that watches for session completion. When the
+	// session ends (child process dies, stream closes, server disconnect),
+	// the done channel is closed. Ping checks this to detect a dead session
+	// without spawning new processes or making network calls.
+	done := make(chan struct{})
+	c.done = done
+	go func() {
+		_ = session.Wait()
+		close(done)
+	}()
+
 	return nil
 }
 
@@ -152,28 +171,46 @@ func (c *Client) makeAutoTransport() (mcp.Transport, error) {
 }
 
 // makeHTTPTransport creates a StreamableClientTransport with optional bearer auth.
+//
+// B3 fix: We do NOT set http.Client.Timeout because it applies to the entire
+// request lifetime, including long-lived SSE GET streams on stateful servers.
+// That kills the SSE connection after Timeout elapses, breaking stateful clients.
+//
+// Instead, when Config.Timeout is set, we configure the underlying HTTP
+// Transport with DialContext timeout and ResponseHeaderTimeout. This bounds:
+//   - TCP dial time (hanging server that never accepts)
+//   - HTTP response header wait (server accepts TCP but never responds)
+//
+// Once headers are received (SSE stream starts), the stream lives until the
+// session is closed. MaxRetries is left at the SDK default so the SDK can
+// reopen SSE streams on transient failures.
 func (c *Client) makeHTTPTransport() *mcp.StreamableClientTransport {
 	t := &mcp.StreamableClientTransport{
 		Endpoint: c.config.Endpoint,
-		// Disable SDK retries — they defeat our timeout by retrying
-		// multiple times against a non-responsive server.
-		MaxRetries: -1,
 	}
 
-	// Build a custom HTTP client when we need bearer auth or a timeout.
-	var rt http.RoundTripper = http.DefaultTransport
+	// Build a custom HTTP client when we need bearer auth or a connect timeout.
+	rt := http.RoundTripper(http.DefaultTransport)
+	if c.config.Timeout > 0 {
+		rt = &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout: c.config.Timeout,
+			}).DialContext,
+			ResponseHeaderTimeout: c.config.Timeout,
+			// Preserve sensible defaults from http.DefaultTransport.
+			MaxIdleConns:        100,
+			IdleConnTimeout:     90 * time.Second,
+			TLSHandshakeTimeout: 10 * time.Second,
+		}
+	}
 	if c.config.BearerToken != "" {
 		rt = &bearerRoundTripper{
 			token: c.config.BearerToken,
 			next:  rt,
 		}
 	}
-	if c.config.BearerToken != "" || c.config.Timeout > 0 {
-		httpClient := &http.Client{Transport: rt}
-		if c.config.Timeout > 0 {
-			httpClient.Timeout = c.config.Timeout
-		}
-		t.HTTPClient = httpClient
+	if c.config.Timeout > 0 || c.config.BearerToken != "" {
+		t.HTTPClient = &http.Client{Transport: rt}
 	}
 
 	return t
@@ -260,7 +297,12 @@ func (c *Client) ListTools(ctx context.Context) (*mcp.ListToolsResult, error) {
 }
 
 // CallTool invokes a tool by name with the given arguments and returns the
-// raw SDK CallToolResult.
+// raw SDK CallToolResult. On transport errors (server restart, dead stream),
+// it invalidates the session. It retries once ONLY when the error indicates
+// the request could not have reached the server (connection refused, session
+// missing, connection closed before the call started). Mid-flight errors
+// (connection reset, broken pipe, EOF after the request was sent) are NOT
+// retried to prevent double-execution of non-idempotent tools.
 func (c *Client) CallTool(ctx context.Context, name string, args map[string]any) (*mcp.CallToolResult, error) {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
@@ -277,6 +319,27 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]any)
 	if err != nil {
 		if isTransportError(err) {
 			c.invalidateSession()
+			// Retry once ONLY if the error proves the request never reached
+			// the server. Mid-flight errors (connection reset, broken pipe,
+			// EOF) could mean the server executed the tool but crashed before
+			// delivering the response -- retrying would double-execute.
+			if isRetryableError(err) {
+				session2, err2 := c.ensureSession(ctx)
+				if err2 != nil {
+					return nil, fmt.Errorf("emcp: CallTool %q failed: %w", name, err)
+				}
+				result2, err2 := session2.CallTool(ctx, &mcp.CallToolParams{
+					Name:      name,
+					Arguments: args,
+				})
+				if err2 != nil {
+					if isTransportError(err2) {
+						c.invalidateSession()
+					}
+					return nil, fmt.Errorf("emcp: CallTool %q failed: %w", name, err2)
+				}
+				return result2, nil
+			}
 		}
 		return nil, fmt.Errorf("emcp: CallTool %q failed: %w", name, err)
 	}
@@ -312,10 +375,37 @@ func (c *Client) Ping(ctx context.Context) error {
 	return nil
 }
 
-// pingViaDiscover performs a throw-away Connect+Close as a liveness check.
-// This sends a single server/discover POST and tears down the temporary
-// session immediately.
+// pingViaDiscover performs a liveness check appropriate for the transport.
+//
+// B6 fix: for stdio, makeTransport() spawns a new child process via
+// exec.Command, so we must NOT call it for ping. Instead, the existing
+// session IS the liveness proof for stdio (if the child died, the next
+// call will fail and trigger reconnect).
+//
+// For HTTP and gRPC, we do a throw-away Connect+Close (one server/discover
+// round-trip) to verify the server is reachable.
 func (c *Client) pingViaDiscover(ctx context.Context) error {
+	// For ALL transports, check the done channel first. When the session
+	// has ended (child process died, stream closed, server disconnect),
+	// the done channel is closed by the watcher goroutine in connect().
+	c.mu.Lock()
+	done := c.done
+	c.mu.Unlock()
+	if done != nil {
+		select {
+		case <-done:
+			return fmt.Errorf("emcp: session closed")
+		default:
+		}
+	}
+
+	// For stdio, the done-channel check above is the only liveness probe.
+	// We must NOT call makeTransport() for stdio because it would spawn
+	// a new child process (B6 fix).
+	if c.config.Transport == TransportStdio {
+		return nil
+	}
+
 	transport, err := c.makeTransport()
 	if err != nil {
 		return fmt.Errorf("emcp: Ping failed: %w", err)
@@ -365,7 +455,13 @@ func (c *Client) ClearSession() {
 // isTransportError returns true when the error indicates the session's
 // underlying transport is broken and the session must be discarded.
 // JSON-RPC application errors (tool not found, invalid params, handler
-// errors) return false — the session is still usable.
+// errors) return false -- the session is still usable.
+//
+// B5 fix: context.DeadlineExceeded and context.Canceled are NOT transport
+// errors. A slow tool hitting a per-call deadline does not mean the server
+// is dead -- it means this particular call timed out. Killing the session
+// on every timeout causes all concurrent callers to fail and forces
+// unnecessary reconnects.
 func isTransportError(err error) bool {
 	if err == nil {
 		return false
@@ -378,6 +474,12 @@ func isTransportError(err error) bool {
 		return false
 	}
 
+	// Context errors are NOT transport errors. A per-call deadline or
+	// cancellation does not indicate the server is dead.
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return false
+	}
+
 	// SDK sentinel errors for broken connections/sessions.
 	if errors.Is(err, mcp.ErrConnectionClosed) || errors.Is(err, mcp.ErrSessionMissing) {
 		return true
@@ -385,11 +487,6 @@ func isTransportError(err error) bool {
 
 	// Underlying I/O errors (EOF, connection reset, etc).
 	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-		return true
-	}
-
-	// Context errors propagated from a failed transport read/write.
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
 
@@ -410,14 +507,56 @@ func isTransportError(err error) bool {
 	return false
 }
 
+// isRetryableError returns true only when the error proves the request never
+// reached the server. Only these errors are safe for automatic retry in
+// CallTool, because retrying a request that DID reach the server could
+// double-execute a non-idempotent tool (e.g., apply_patch).
+//
+// Mid-flight errors like "connection reset", "broken pipe", and EOF mean the
+// request may have been received and executed before the connection dropped.
+// Those are transport errors (session should be invalidated) but NOT retryable.
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// SDK sentinel errors that prove no request was processed.
+	if errors.Is(err, mcp.ErrSessionMissing) || errors.Is(err, mcp.ErrConnectionClosed) {
+		return true
+	}
+
+	// Connection refused: the server wasn't even listening.
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		if sysErr, ok := opErr.Err.(*os.SyscallError); ok {
+			if sysErr.Syscall == "connectex" || sysErr.Syscall == "connect" {
+				return true
+			}
+		}
+	}
+
+	// Fallback string check for "connection refused" across platforms.
+	if strings.Contains(err.Error(), "connection refused") {
+		return true
+	}
+
+	return false
+}
+
 // invalidateSession closes the current session and clears it so the next
-// call will trigger a reconnect. Caller must NOT hold c.mu.
+// call will trigger a reconnect.
+//
+// B4 fix: session.Close() sends a DELETE request on legacy (stateful)
+// sessions. If the server hangs on DELETE, holding c.mu during Close()
+// would block ALL concurrent callers. We copy the session pointer under
+// the lock, release the lock, then Close() outside the lock.
 func (c *Client) invalidateSession() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.session != nil {
-		_ = c.session.Close()
-		c.session = nil
+	s := c.session
+	c.session = nil
+	c.mu.Unlock()
+	if s != nil {
+		_ = s.Close()
 	}
 }
 

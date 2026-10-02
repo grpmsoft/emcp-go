@@ -4,8 +4,8 @@
 
 Enterprise MCP Extensions for Go -- a unified client+server library built on
 top of the official [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk)
-(v1.8.0). Published under [goco-ai](https://github.com/goco-ai), consumed
-by [GODE](https://github.com/goco-ai/gode) (headless IDE with 65 MCP tools).
+(v1.8.0). Published under [grpmsoft](https://github.com/grpmsoft), consumed
+by GODE (headless Go IDE with 65 MCP tools, primary consumer).
 
 emcp-go adds two capabilities the official SDK does not provide out of the box:
 
@@ -183,15 +183,15 @@ message MCPMessage {
 }
 ```
 
-The `grpc/typed/` package provides an alternative with native protobuf messages
-for each MCP method (Initialize, Ping, ListTools, CallTool) using the Google
-canonical proto for MCP-over-gRPC.
+The `grpc/typed/` package (experimental) provides an alternative with native protobuf messages
+for MCP methods (ListTools, CallTool implemented; 6 RPCs return Unimplemented) using the Google
+canonical proto (`GoogleCloudPlatform/mcp-grpc-transport-proto@1d2216c`). Standalone tool registry.
 
 ## Ecosystem
 
 | Repo | Relationship |
 |------|-------------|
-| [GODE](https://github.com/goco-ai/gode) | Consumer -- headless IDE with 65 MCP tools |
+| [GODE](https://github.com/grpmsoft/gode) | Consumer -- headless IDE with 65 MCP tools |
 | [grpmsoft/daemon](https://github.com/grpmsoft/daemon) | Complementary -- daemon lifecycle; PID file format |
 | [Official MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) | Foundation -- emcp-go builds on top |
 

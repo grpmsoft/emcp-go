@@ -35,10 +35,14 @@ type ToolResult struct {
 // Currently only text is supported; image and audio fields are reserved
 // for future use.
 type ContentItem struct {
-	Type     string // "text", "image", or "audio"
-	Text     string
-	MIMEType string
-	Data     []byte
+	Type        string // "text", "image", "audio", "resource", "resource_link"
+	Text        string
+	MIMEType    string
+	Data        []byte
+	URI         string
+	Name        string
+	Title       string
+	Description string
 }
 
 // --- MCP Tool -> Proto Tool ---
@@ -111,15 +115,20 @@ func protoToolToInfo(pt *mcppb.Tool) *ToolInfo {
 // --- Proto CallToolRequest -> tool name + JSON args ---
 
 // protoCallToolArgs extracts the tool name and JSON-encoded arguments from
-// a proto CallToolRequest.
+// a proto CallToolRequest. The canonical proto nests name and arguments
+// inside a Request sub-message (field 2).
 func protoCallToolArgs(req *mcppb.CallToolRequest) (name string, argsJSON json.RawMessage, err error) {
-	name = req.GetName()
+	inner := req.GetRequest()
+	if inner == nil {
+		return "", nil, fmt.Errorf("CallToolRequest.request is required")
+	}
+	name = inner.GetName()
 	if name == "" {
 		return "", nil, fmt.Errorf("tool name is required")
 	}
 
-	if req.GetArguments() != nil {
-		argsJSON, err = json.Marshal(req.GetArguments().AsMap())
+	if inner.GetArguments() != nil {
+		argsJSON, err = json.Marshal(inner.GetArguments().AsMap())
 		if err != nil {
 			return "", nil, fmt.Errorf("marshaling arguments: %w", err)
 		}
@@ -175,6 +184,25 @@ func contentToProto(c mcp.Content) *mcppb.CallToolResponse_Content {
 			Data:     v.Data,
 			MimeType: v.MIMEType,
 		}
+	case *mcp.EmbeddedResource:
+		er := &mcppb.EmbeddedResource{}
+		if v.Resource != nil {
+			er.Contents = &mcppb.ResourceContents{
+				Uri:      v.Resource.URI,
+				MimeType: v.Resource.MIMEType,
+				Text:     v.Resource.Text,
+				Blob:     v.Resource.Blob,
+			}
+		}
+		pc.EmbeddedResource = er
+	case *mcp.ResourceLink:
+		pc.ResourceLink = &mcppb.Resource{
+			Uri:         v.URI,
+			Name:        v.Name,
+			Title:       v.Title,
+			Description: v.Description,
+			MimeType:    v.MIMEType,
+		}
 	}
 	return pc
 }
@@ -198,6 +226,25 @@ func protoContentToItem(pc *mcppb.CallToolResponse_Content) ContentItem {
 			Type:     "audio",
 			Data:     pc.GetAudio().GetData(),
 			MIMEType: pc.GetAudio().GetMimeType(),
+		}
+	case pc.GetEmbeddedResource() != nil:
+		item := ContentItem{Type: "resource"}
+		if c := pc.GetEmbeddedResource().GetContents(); c != nil {
+			item.URI = c.GetUri()
+			item.MIMEType = c.GetMimeType()
+			item.Text = c.GetText()
+			item.Data = c.GetBlob()
+		}
+		return item
+	case pc.GetResourceLink() != nil:
+		r := pc.GetResourceLink()
+		return ContentItem{
+			Type:        "resource_link",
+			URI:         r.GetUri(),
+			Name:        r.GetName(),
+			Title:       r.GetTitle(),
+			Description: r.GetDescription(),
+			MIMEType:    r.GetMimeType(),
 		}
 	default:
 		return ContentItem{Type: "text"}

@@ -1,21 +1,73 @@
-// MCP gRPC service with typed RPCs.
-// Based on the Google canonical proto for MCP-over-gRPC.
-// Each MCP method has its own RPC with native protobuf messages.
+// MCP protocol schema based on the MCP specification:
+// https://modelcontextprotocol.io/specification/2026-07-28/
+// Last Updated on: 2026-07-20
 
 syntax = "proto3";
 
 package model_context_protocol;
 
-option go_package = "github.com/goco-ai/emcp-go/grpc/typed/proto/mcppb";
+import "mcp_messages.proto";
 
-import "grpc/typed/proto/mcppb/mcp_messages.proto";
+option java_multiple_files = true;
+option java_outer_classname = "McpProto";
+option java_package = "com.google.mcp";
 
-// Mcp is the typed gRPC service for MCP operations.
-// Each RPC corresponds to a specific MCP method with native protobuf types.
+// TODO(roth):
+// - add Tasks support
+// - add Discovery and Capabilities
+// - add anything else that might be missing from the 2026-07-28 spec
+// - add a server-side streaming call for watch-based notifications
+
 service Mcp {
-  // ListTools returns all tools registered on the server.
+  //
+  // Resources
+  //
+
+  // List resources.
+  rpc ListResources(ListResourcesRequest) returns (ListResourcesResponse);
+  // Read a resource.
+  // In order to better integrate with existing data plane mechanisms for
+  // request routing and authz, the client will add a header called
+  // mcp_resource whose value is the name of the resource being requested.
+  rpc ReadResource(ReadResourceRequest) returns (ReadResourceResponse);
+  // List resource templates.
+  rpc ListResourceTemplates(ListResourceTemplatesRequest)
+      returns (ListResourceTemplatesResponse);
+
+  //
+  // Prompts
+  //
+
+  // List prompts.
+  rpc ListPrompts(ListPromptsRequest) returns (ListPromptsResponse);
+
+  // Get a prompt.
+  // In order to better integrate with existing data plane mechanisms for
+  // request routing and authz, the client will add a header called
+  // mcp_prompt whose value is the name of the prompt being requested.
+  rpc GetPrompt(GetPromptRequest) returns (GetPromptResponse);
+
+  //
+  // Tools
+  //
+
+  // List tools.
   rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
 
-  // CallTool invokes a named tool with the given arguments.
+  // Call a tool.
+  // In order to better integrate with existing data plane mechanisms for
+  // request routing and authz, the client will add a header called
+  // mcp_tool whose value is the name of the tool being called.
   rpc CallTool(CallToolRequest) returns (CallToolResponse);
+
+  //
+  // Completions
+  //
+
+  // Requests completions.
+  // In order to better integrate with existing data plane mechanisms for
+  // request routing and authz, the client will add a header called
+  // mcp_resource whose value is the name of the resource or prompt being
+  // used for completion.
+  rpc Complete(CompletionRequest) returns (CompletionResponse);
 }
