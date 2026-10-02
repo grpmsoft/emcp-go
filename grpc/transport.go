@@ -164,4 +164,3 @@ func (c *ownedClientConn) Close() error {
 	}
 	return ccErr
 }
-

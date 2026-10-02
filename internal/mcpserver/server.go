@@ -25,16 +25,36 @@ type ToolHandler func(ctx context.Context, name string, args map[string]any) (*T
 // ToolResult is the internal representation of a tool call result.
 // The root emcp package converts between this and its own public ToolResult.
 type ToolResult struct {
-	Content []ContentItem
-	IsError bool
+	Content           []ContentItem
+	StructuredContent map[string]any
+	IsError           bool
 }
 
 // ContentItem is the internal representation of a content item.
+// Supports all MCP content types: text, image, audio, resource_link,
+// and resource (embedded resource).
 type ContentItem struct {
 	Type     string
 	Text     string
 	MIMEType string
 	Data     []byte
+
+	// resource_link fields
+	URI         string
+	Name        string
+	Title       string
+	Description string
+
+	// embedded resource
+	Resource *ResourceContents
+}
+
+// ResourceContents holds the contents of an embedded resource.
+type ResourceContents struct {
+	URI      string
+	MIMEType string
+	Text     string
+	Blob     []byte
 }
 
 // Config holds parameters for creating a Server.
@@ -188,6 +208,7 @@ func extractArguments(req *mcp.CallToolRequest) (map[string]any, error) {
 }
 
 // toSDKResult converts our internal ToolResult to the SDK's CallToolResult.
+// B7 fix: preserves StructuredContent through the conversion.
 func toSDKResult(r *ToolResult) *mcp.CallToolResult {
 	if r == nil {
 		return &mcp.CallToolResult{}
@@ -199,10 +220,16 @@ func toSDKResult(r *ToolResult) *mcp.CallToolResult {
 	for _, item := range r.Content {
 		result.Content = append(result.Content, toSDKContent(item))
 	}
+	// Preserve StructuredContent (SEP-2106) if present.
+	if r.StructuredContent != nil {
+		result.StructuredContent = r.StructuredContent
+	}
 	return result
 }
 
 // toSDKContent converts an internal ContentItem to an SDK Content value.
+// B7 fix: handles resource_link and embedded resource types, not just
+// text/image/audio.
 func toSDKContent(item ContentItem) mcp.Content {
 	switch item.Type {
 	case "image":
@@ -215,6 +242,25 @@ func toSDKContent(item ContentItem) mcp.Content {
 			Data:     item.Data,
 			MIMEType: item.MIMEType,
 		}
+	case "resource_link":
+		return &mcp.ResourceLink{
+			URI:         item.URI,
+			Name:        item.Name,
+			Title:       item.Title,
+			Description: item.Description,
+			MIMEType:    item.MIMEType,
+		}
+	case "resource":
+		er := &mcp.EmbeddedResource{}
+		if item.Resource != nil {
+			er.Resource = &mcp.ResourceContents{
+				URI:      item.Resource.URI,
+				MIMEType: item.Resource.MIMEType,
+				Text:     item.Resource.Text,
+				Blob:     item.Resource.Blob,
+			}
+		}
+		return er
 	default:
 		return &mcp.TextContent{Text: item.Text}
 	}

@@ -132,20 +132,36 @@ func ErrorResult(msg string) *ToolResult {
 }
 
 // toInternalResult converts a public ToolResult to the internal representation.
+// B7 fix: passes through all content types (resource_link, embedded resource)
+// and StructuredContent to the internal layer for proper SDK conversion.
 func toInternalResult(r *ToolResult) *mcpserver.ToolResult {
 	if r == nil {
 		return &mcpserver.ToolResult{}
 	}
 	result := &mcpserver.ToolResult{
-		IsError: r.IsError,
+		IsError:           r.IsError,
+		StructuredContent: r.StructuredContent,
 	}
 	for _, item := range r.Content {
-		result.Content = append(result.Content, mcpserver.ContentItem{
-			Type:     item.Type,
-			Text:     item.Text,
-			MIMEType: item.MIMEType,
-			Data:     item.Data,
-		})
+		ci := mcpserver.ContentItem{
+			Type:        item.Type,
+			Text:        item.Text,
+			MIMEType:    item.MIMEType,
+			Data:        item.Data,
+			URI:         item.URI,
+			Name:        item.Name,
+			Title:       item.Title,
+			Description: item.Description,
+		}
+		if item.Resource != nil {
+			ci.Resource = &mcpserver.ResourceContents{
+				URI:      item.Resource.URI,
+				MIMEType: item.Resource.MIMEType,
+				Text:     item.Resource.Text,
+				Blob:     item.Resource.Blob,
+			}
+		}
+		result.Content = append(result.Content, ci)
 	}
 	return result
 }

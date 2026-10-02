@@ -97,4 +97,3 @@ func (c *TypedMCPClient) Close() error {
 	}
 	return nil
 }
-

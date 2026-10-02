@@ -38,7 +38,7 @@ func NewMcpClient(cc grpc.ClientConnInterface) McpClient {
 
 func (c *mcpClient) ListTools(ctx context.Context, in *ListToolsRequest, opts ...grpc.CallOption) (*ListToolsResponse, error) {
 	out := new(ListToolsResponse)
-	err := c.cc.Invoke(ctx, "/model_context_protocol.Mcp/ListTools", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/mcppb.Mcp/ListTools", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +47,7 @@ func (c *mcpClient) ListTools(ctx context.Context, in *ListToolsRequest, opts ..
 
 func (c *mcpClient) CallTool(ctx context.Context, in *CallToolRequest, opts ...grpc.CallOption) (*CallToolResponse, error) {
 	out := new(CallToolResponse)
-	err := c.cc.Invoke(ctx, "/model_context_protocol.Mcp/CallTool", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/mcppb.Mcp/CallTool", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func _Mcp_ListTools_Handler(srv interface{}, ctx context.Context, dec func(inter
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/model_context_protocol.Mcp/ListTools",
+		FullMethod: "/mcppb.Mcp/ListTools",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(McpServer).ListTools(ctx, req.(*ListToolsRequest))
@@ -116,7 +116,7 @@ func _Mcp_CallTool_Handler(srv interface{}, ctx context.Context, dec func(interf
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/model_context_protocol.Mcp/CallTool",
+		FullMethod: "/mcppb.Mcp/CallTool",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(McpServer).CallTool(ctx, req.(*CallToolRequest))
@@ -128,7 +128,7 @@ func _Mcp_CallTool_Handler(srv interface{}, ctx context.Context, dec func(interf
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Mcp_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "model_context_protocol.Mcp",
+	ServiceName: "mcppb.Mcp",
 	HandlerType: (*McpServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
