@@ -1,38 +1,27 @@
 # Roadmap
 
-## Current State: v0.1.0
+## v0.1.1 (current)
 
-Enterprise MCP extensions for Go, built on the official MCP Go SDK.
-Unified client+server with HTTP, gRPC, and stdio transports.
+See [CHANGELOG.md](CHANGELOG.md) for full feature list.
 
-### What works
+Key capabilities: unified Client + Server on official MCP Go SDK v1.8.0, HTTP/gRPC stream/stdio transports, bearer auth (client + server), stateless by default (MCP 2026-07-28), PID file discovery, session liveness, retry-once.
 
-- Unified Client: `NewClient(Config)` with HTTP, gRPC, stdio transports
-- Unified Server: `NewServer(ServerConfig)` with `HTTPHandler()` and `GRPCHandler()`
-- gRPC bidirectional stream transport (`grpc/` package)
-- Typed gRPC with Google canonical proto (`grpc/typed/` package)
-- PID file discovery for daemon-managed servers
-- Bearer token authentication for HTTP transport
-- `TextResult()` and `ErrorResult()` convenience constructors
-- 57 tests across 3 packages (root, grpc, grpc/typed)
+gRPC typed transport (`grpc/typed/`) is **experimental**: Google canonical proto (`GoogleCloudPlatform/mcp-grpc-transport-proto@1d2216c`), standalone tool registry, 2 of 8 RPCs implemented (ListTools, CallTool).
 
-## v0.2.0 -- Resilience
+## Future
 
-- [ ] Reconnection strategy for gRPC and HTTP transports
-- [ ] Middleware hooks for client-side request/response interception
-- [ ] Logging middleware with structured slog output
-- [ ] Prometheus-compatible MetricsRecorder implementation
+- Bridge typed gRPC to shared `*mcp.Server` (no separate tool registry)
+- Remaining 6 typed RPCs (resources, prompts, complete)
+- Reconnection strategy for long-lived clients
+- Middleware hooks for client-side request/response interception
+- Logging middleware with structured slog output
+- Prometheus-compatible MetricsRecorder
 
-## v0.3.0 -- Transports
+## v1.0.0 — Stability
 
-- [ ] SSE transport support
-- [ ] Typed tool handlers with generic type parameters
-
-## v1.0.0 -- Stability
-
-- [ ] Stable public API (no breaking changes after 1.0)
-- [ ] `example_test.go` (pkg.go.dev runnable examples)
-- [ ] OpenSSF Scorecard badge
+- Stable public API (no breaking changes after 1.0)
+- `example_test.go` (pkg.go.dev runnable examples)
+- OpenSSF Scorecard badge
 
 ## Non-Goals
 

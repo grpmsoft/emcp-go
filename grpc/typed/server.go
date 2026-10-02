@@ -7,8 +7,10 @@
 // protobuf messages (based on the Google canonical proto for MCP).
 //
 // The server adapter (TypedGRPCHandler) maintains its own tool registry
-// and implements the mcppb.McpServer interface. Tools are registered via
-// AddTool and invoked through the CallTool RPC.
+// and implements the mcppb.McpServer interface (all 8 RPCs from the
+// Google canonical proto). Tools are registered via AddTool and invoked
+// through the CallTool RPC. Non-tool RPCs (resources, prompts,
+// completions) return codes.Unimplemented until bridging is wired up.
 //
 // The client (TypedMCPClient) wraps the generated gRPC stub with a clean
 // Go API that returns simple Go types instead of proto messages.
@@ -21,6 +23,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/grpmsoft/emcp-go/grpc/typed/proto/mcppb"
@@ -43,8 +46,9 @@ type registeredTool struct {
 }
 
 // TypedGRPCHandler implements the Google canonical mcppb.McpServer gRPC
-// service. It maintains its own tool registry and dispatches CallTool RPCs
-// to the registered handlers.
+// service (all 8 RPCs). It maintains its own tool registry and dispatches
+// CallTool RPCs to the registered handlers. Non-tool RPCs (resources,
+// prompts, completions) return codes.Unimplemented.
 //
 // Usage:
 //
@@ -62,8 +66,7 @@ type TypedGRPCHandler struct {
 // Compile-time check: TypedGRPCHandler implements mcppb.McpServer.
 var _ mcppb.McpServer = (*TypedGRPCHandler)(nil)
 
-// NewTypedGRPCHandler creates a new TypedGRPCHandler with an empty tool
-// registry.
+// NewTypedGRPCHandler creates a new TypedGRPCHandler with an empty tool registry.
 func NewTypedGRPCHandler() *TypedGRPCHandler {
 	return &TypedGRPCHandler{
 		tools: make(map[string]*registeredTool),
@@ -92,16 +95,26 @@ func (h *TypedGRPCHandler) RemoveTools(names ...string) {
 	}
 }
 
+// --- Tool RPCs (implemented) ---
+
 // ListTools implements mcppb.McpServer. It returns all registered tools
-// as proto Tool messages.
+// as proto Tool messages, sorted by name for deterministic output.
 func (h *TypedGRPCHandler) ListTools(_ context.Context, _ *mcppb.ListToolsRequest) (*mcppb.ListToolsResponse, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
+	// Collect names and sort for deterministic iteration order.
+	names := make([]string, 0, len(h.tools))
+	for name := range h.tools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
 	resp := &mcppb.ListToolsResponse{
 		Tools: make([]*mcppb.Tool, 0, len(h.tools)),
 	}
-	for _, rt := range h.tools {
+	for _, name := range names {
+		rt := h.tools[name]
 		pt, err := mcpToolToProto(rt.tool)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "converting tool %q: %v", rt.tool.Name, err)
@@ -137,6 +150,44 @@ func (h *TypedGRPCHandler) CallTool(ctx context.Context, req *mcppb.CallToolRequ
 
 	return callToolResultToProto(result), nil
 }
+
+// --- Resource RPCs (unimplemented) ---
+
+// ListResources implements mcppb.McpServer. Currently returns Unimplemented.
+func (h *TypedGRPCHandler) ListResources(_ context.Context, _ *mcppb.ListResourcesRequest) (*mcppb.ListResourcesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "ListResources not implemented in typed transport")
+}
+
+// ReadResource implements mcppb.McpServer. Currently returns Unimplemented.
+func (h *TypedGRPCHandler) ReadResource(_ context.Context, _ *mcppb.ReadResourceRequest) (*mcppb.ReadResourceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "ReadResource not implemented in typed transport")
+}
+
+// ListResourceTemplates implements mcppb.McpServer. Currently returns Unimplemented.
+func (h *TypedGRPCHandler) ListResourceTemplates(_ context.Context, _ *mcppb.ListResourceTemplatesRequest) (*mcppb.ListResourceTemplatesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "ListResourceTemplates not implemented in typed transport")
+}
+
+// --- Prompt RPCs (unimplemented) ---
+
+// ListPrompts implements mcppb.McpServer. Currently returns Unimplemented.
+func (h *TypedGRPCHandler) ListPrompts(_ context.Context, _ *mcppb.ListPromptsRequest) (*mcppb.ListPromptsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "ListPrompts not implemented in typed transport")
+}
+
+// GetPrompt implements mcppb.McpServer. Currently returns Unimplemented.
+func (h *TypedGRPCHandler) GetPrompt(_ context.Context, _ *mcppb.GetPromptRequest) (*mcppb.GetPromptResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "GetPrompt not implemented in typed transport")
+}
+
+// --- Completion RPC (unimplemented) ---
+
+// Complete implements mcppb.McpServer. Currently returns Unimplemented.
+func (h *TypedGRPCHandler) Complete(_ context.Context, _ *mcppb.CompletionRequest) (*mcppb.CompletionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "Complete not implemented in typed transport")
+}
+
+// --- Convenience helpers ---
 
 // AddToolFunc is a convenience method that registers a tool with a typed
 // handler function. The arguments type In is deserialized from JSON

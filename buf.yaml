@@ -1,0 +1,14 @@
+version: v2
+modules:
+  # Upstream files kept verbatim: GoogleCloudPlatform/mcp-grpc-transport-proto
+  # (commit 1d2216c, 2026-08-31, MCP schema 2026-07-28). Module root = proto dir
+  # so the upstream `import "mcp_messages.proto"` resolves unchanged.
+  - path: grpc/typed/proto/mcppb
+lint:
+  use:
+    - STANDARD
+  ignore:
+    - grpc/typed/proto/mcppb
+breaking:
+  use:
+    - FILE

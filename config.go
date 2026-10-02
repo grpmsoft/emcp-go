@@ -18,7 +18,8 @@ const (
 	// TransportStdio connects via stdin/stdout to a child process.
 	TransportStdio Transport = "stdio"
 
-	// TransportAuto tries gRPC first, then falls back to HTTP.
+	// TransportAuto selects transport by endpoint scheme: "http(s)://" → HTTP,
+	// bare "host:port" → gRPC, default → HTTP.
 	TransportAuto Transport = "auto"
 )
 

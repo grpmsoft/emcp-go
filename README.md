@@ -8,7 +8,7 @@
 
 **Enterprise MCP Extensions for Go -- unified client+server library built on the official [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk).**
 
-Adds gRPC bidirectional stream transport, PID file discovery, and bearer auth to any MCP server or client.
+Adds gRPC bidirectional stream transport, PID file discovery, and bearer token authentication (client-side injection + opt-in server-side verification via `TokenValidator`) to any MCP server or client.
 
 ```
 Your CLI / Agent
@@ -145,7 +145,7 @@ message MCPMessage {
 
 JSON-RPC messages are serialized via the official SDK and transported as opaque byte payloads. The gRPC layer never inspects the JSON-RPC content.
 
-The `grpc/typed/` package provides an alternative with native protobuf messages for each MCP method, using the Google canonical proto for MCP-over-gRPC.
+The `grpc/typed/` package provides an **experimental** alternative with native protobuf messages, using the canonical proto from `GoogleCloudPlatform/mcp-grpc-transport-proto@1d2216c`. Standalone tool registry, 2 of 8 RPCs implemented (ListTools, CallTool). Bridge to shared `*mcp.Server` planned.
 
 ## API Reference
 
@@ -231,7 +231,7 @@ Not yet. See [ROADMAP.md](ROADMAP.md).
 ## Related Projects
 
 - [Official MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) -- Core MCP implementation
-- [GODE](https://github.com/goco-ai/gode) -- Headless Go IDE with 65 MCP tools (primary consumer)
+- [GODE](https://github.com/grpmsoft/gode) -- Headless Go IDE with 65 MCP tools (primary consumer)
 - [grpmsoft/daemon](https://github.com/grpmsoft/daemon) -- On-demand daemon lifecycle (PID file format)
 
 ## Contributing

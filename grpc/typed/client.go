@@ -31,10 +31,14 @@ type TypedMCPClient struct {
 // gRPC target. If no transport credentials are provided in opts, insecure
 // credentials are used by default.
 func NewTypedMCPClient(target string, opts ...grpc.DialOption) (*TypedMCPClient, error) {
-	if !hasTransportCredentials(opts) {
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// Always include insecure credentials as a baseline. User-supplied
+	// DialOptions are appended on top; if they set explicit credentials,
+	// the last-set wins per gRPC semantics.
+	allOpts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
-	conn, err := grpc.NewClient(target, opts...)
+	allOpts = append(allOpts, opts...)
+	conn, err := grpc.NewClient(target, allOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial gRPC target %q: %w", target, err)
 	}
@@ -66,9 +70,10 @@ func (c *TypedMCPClient) ListTools(ctx context.Context) ([]*ToolInfo, error) {
 }
 
 // CallTool invokes a tool by name with the given arguments. The arguments
-// map is converted to a proto Struct for transmission.
+// map is converted to a proto Struct for transmission. The canonical proto
+// nests name and arguments inside a Request sub-message.
 func (c *TypedMCPClient) CallTool(ctx context.Context, name string, args map[string]any) (*ToolResult, error) {
-	req := &mcppb.CallToolRequest{
+	inner := &mcppb.CallToolRequest_Request{
 		Name: name,
 	}
 	if len(args) > 0 {
@@ -76,7 +81,10 @@ func (c *TypedMCPClient) CallTool(ctx context.Context, name string, args map[str
 		if err != nil {
 			return nil, fmt.Errorf("converting arguments: %w", err)
 		}
-		req.Arguments = s
+		inner.Arguments = s
+	}
+	req := &mcppb.CallToolRequest{
+		Request: inner,
 	}
 	resp, err := c.client.CallTool(ctx, req)
 	if err != nil {
@@ -92,15 +100,4 @@ func (c *TypedMCPClient) Close() error {
 		return c.conn.Close()
 	}
 	return nil
-}
-
-// hasTransportCredentials checks whether any of the dial options already
-// configure transport credentials.
-func hasTransportCredentials(opts []grpc.DialOption) bool {
-	for _, opt := range opts {
-		if opt != nil {
-			return true
-		}
-	}
-	return false
 }
