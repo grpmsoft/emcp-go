@@ -1,5 +1,5 @@
-// Copyright 2026 GOCO-AI. All rights reserved.
-// Use of this source code is governed by an MIT-style license.
+// Copyright 2026 GOCO-AI Authors.
+// SPDX-License-Identifier: Apache-2.0
 
 // Package emcp provides a unified MCP client that wraps the official
 // MCP Go SDK and the emcp-go gRPC transport. Consumers import emcp-go

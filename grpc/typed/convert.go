@@ -1,5 +1,5 @@
-// Copyright 2026 GOCO-AI. All rights reserved.
-// Use of this source code is governed by an MIT-style license.
+// Copyright 2026 GOCO-AI Authors.
+// SPDX-License-Identifier: Apache-2.0
 
 package typed
 
@@ -72,9 +72,9 @@ func mcpToolToProto(t *mcp.Tool) (*mcppb.Tool, error) {
 	// Convert annotations.
 	if t.Annotations != nil {
 		pt.Annotations = &mcppb.ToolAnnotations{
-			Title:           t.Annotations.Title,
-			ReadOnlyHint:    t.Annotations.ReadOnlyHint,
-			IdempotentHint:  t.Annotations.IdempotentHint,
+			Title:          t.Annotations.Title,
+			ReadOnlyHint:   t.Annotations.ReadOnlyHint,
+			IdempotentHint: t.Annotations.IdempotentHint,
 		}
 		if t.Annotations.DestructiveHint != nil {
 			pt.Annotations.DestructiveHint = *t.Annotations.DestructiveHint

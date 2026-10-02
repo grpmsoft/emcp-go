@@ -1,61 +1,137 @@
-# eMCP — Enterprise MCP Extensions for Go
+# emcp-go
 
-Enterprise extensions for the [official MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk). Adds gRPC bidirectional stream transport, risk assessment, metrics, and production middleware to any MCP server.
+[![CI](https://github.com/goco-ai/emcp-go/actions/workflows/ci.yml/badge.svg)](https://github.com/goco-ai/emcp-go/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/goco-ai/emcp-go.svg)](https://pkg.go.dev/github.com/goco-ai/emcp-go)
+[![codecov](https://codecov.io/gh/goco-ai/emcp-go/branch/main/graph/badge.svg)](https://codecov.io/gh/goco-ai/emcp-go)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/goco-ai/emcp-go)](https://github.com/goco-ai/emcp-go/blob/main/go.mod)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-## Architecture
+**Enterprise MCP Extensions for Go -- unified client+server library built on the official [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk).**
 
-eMCP is a thin extension layer on top of the official SDK -- not a standalone implementation:
+Adds gRPC bidirectional stream transport, PID file discovery, and bearer auth to any MCP server or client.
 
 ```
-Your MCP Server
+Your CLI / Agent
     |
-    |-- github.com/goco-ai/emcp-go/grpc           <-- gRPC bidi stream transport
-    |-- github.com/goco-ai/emcp-go/middleware      <-- Enterprise middleware
-    |-- github.com/goco-ai/emcp-go/toolmeta        <-- Tool annotations
+    +-- emcp.NewClient(Config)
+    |     |-- HTTP (Streamable HTTP)
+    |     |-- gRPC (bidirectional stream)
+    |     +-- stdio (child process)
     |
-    +-- github.com/modelcontextprotocol/go-sdk     <-- Official MCP SDK (core)
+    +-- emcp.NewServer(ServerConfig)
+          |-- srv.HTTPHandler()   --> http.Handler
+          +-- srv.GRPCHandler()   --> grpc.Server
+          |
+          +-- github.com/modelcontextprotocol/go-sdk  (official MCP SDK)
 ```
 
-## Packages
+## Why
 
-### `grpc` -- gRPC Bidirectional Stream Transport
+The official MCP Go SDK provides the protocol implementation. emcp-go adds what you need in production:
 
-The core package. Bridges MCP over gRPC bidirectional streaming, enabling persistent connections with full-duplex communication, connection multiplexing, TLS, and gRPC middleware.
+- **One client for all transports** -- `NewClient(Config{Endpoint, Transport})` connects via HTTP, gRPC, or stdio. No transport-specific boilerplate.
+- **gRPC transport** -- full-duplex bidirectional streaming, connection multiplexing, TLS, and gRPC middleware. JSON-RPC messages are transported as opaque bytes inside protobuf frames.
+- **Daemon discovery** -- `Config{PIDFile: ".gode/gode.pid"}` reads port and bearer token from a daemon PID file automatically.
+- **Clean public API** -- official SDK types are never exposed. Your code depends on `emcp.ToolResult`, not `mcp.CallToolResult`.
 
-**Server side:**
+## Installation
+
+```bash
+go get github.com/goco-ai/emcp-go@latest
+```
+
+Requires Go 1.27+.
+
+## Quick Start
+
+### Client
 
 ```go
-import (
-    emcpgrpc "github.com/goco-ai/emcp-go/grpc"
-    emcpv1 "github.com/goco-ai/emcp-go/grpc/proto/emcpv1"
-    "google.golang.org/grpc"
-)
-
-mcpServer := mcp.NewServer(impl, nil)
-// ... add tools, prompts, resources ...
-
-grpcServer := grpc.NewServer()
-handler := emcpgrpc.NewGRPCHandler(func() *mcp.Server { return mcpServer })
-emcpv1.RegisterMCPTransportServer(grpcServer, handler)
-grpcServer.Serve(listener)
-```
-
-**Client side:**
-
-```go
-transport := &emcpgrpc.GRPCTransport{
-    Target:      "localhost:50051",
-    DialOptions: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
+client, err := emcp.NewClient(emcp.Config{
+    Endpoint:  "http://localhost:8094/mcp",
+    Transport: emcp.TransportHTTP,
+})
+if err != nil {
+    log.Fatal(err)
 }
-client := mcp.NewClient(impl, nil)
-session, err := client.Connect(ctx, transport, nil)
+defer client.Close()
 
-// Use session exactly like any other MCP transport:
-tools, _ := session.ListTools(ctx, nil)
-result, _ := session.CallTool(ctx, &mcp.CallToolParams{Name: "greet", Arguments: map[string]any{"name": "Alice"}})
+// List available tools:
+tools, err := client.ListTools(ctx)
+
+// Call a tool:
+result, err := client.CallTool(ctx, "echo", map[string]any{"msg": "hello"})
+
+// Health check:
+err = client.Ping(ctx)
 ```
 
-**Protocol:** JSON-RPC messages are serialized via `jsonrpc.EncodeMessage` and transported as opaque byte payloads inside protobuf `MCPMessage` frames. The gRPC layer never inspects the JSON-RPC content.
+### Server
+
+```go
+srv := emcp.NewServer(emcp.ServerConfig{
+    Name:    "my-server",
+    Version: "1.0.0",
+})
+
+srv.AddTool("echo", "echoes the input", map[string]any{
+    "type": "object",
+    "properties": map[string]any{
+        "msg": map[string]any{"type": "string"},
+    },
+}, func(ctx context.Context, name string, args map[string]any) (*emcp.ToolResult, error) {
+    msg, _ := args["msg"].(string)
+    return emcp.TextResult("echo: " + msg), nil
+})
+
+mux := http.NewServeMux()
+mux.Handle("/mcp", srv.HTTPHandler())
+http.ListenAndServe(":8080", mux)
+```
+
+## Three Modes
+
+### Client Mode
+
+Connect to any MCP server with a single call:
+
+```go
+// HTTP
+client, _ := emcp.NewClient(emcp.Config{
+    Endpoint:  "http://localhost:8080/mcp",
+    Transport: emcp.TransportHTTP,
+})
+
+// gRPC
+client, _ := emcp.NewClient(emcp.Config{
+    Endpoint:  "localhost:50051",
+    Transport: emcp.TransportGRPC,
+})
+
+// Daemon discovery (reads port + token from PID file)
+client, _ := emcp.NewClient(emcp.Config{
+    PIDFile: ".gode/gode.pid",
+})
+```
+
+### Server Mode
+
+Serve MCP tools over HTTP and/or gRPC from the same server instance:
+
+```go
+srv := emcp.NewServer(emcp.ServerConfig{Name: "tools", Version: "1.0.0"})
+srv.AddTool("greet", "say hello", schema, handler)
+
+// HTTP
+mux.Handle("/mcp", srv.HTTPHandler())
+
+// gRPC (same server instance)
+emcpv1.RegisterMCPTransportServer(grpcServer, srv.GRPCHandler())
+```
+
+### gRPC Transport
+
+The `grpc/` package implements MCP over gRPC bidirectional streaming:
 
 ```protobuf
 service MCPTransport {
@@ -67,69 +143,101 @@ message MCPMessage {
 }
 ```
 
-### `middleware` -- Enterprise Middleware
+JSON-RPC messages are serialized via the official SDK and transported as opaque byte payloads. The gRPC layer never inspects the JSON-RPC content.
 
-Production middleware implementing the official SDK's `mcp.Middleware` interface.
+The `grpc/typed/` package provides an alternative with native protobuf messages for each MCP method, using the Google canonical proto for MCP-over-gRPC.
 
-```go
-import "github.com/goco-ai/emcp-go/middleware"
+## API Reference
 
-server := mcp.NewServer(impl, nil)
+### Client
 
-server.AddReceivingMiddleware(
-    middleware.Recovery(logger),                                          // catch panics
-    middleware.Metrics(recorder),                                         // per-method timing
-    middleware.RiskGate(policy, risks),                                   // block high-risk tools
-    middleware.Timeout(timeouts, 30*time.Second),                         // per-tool deadlines
-)
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `NewClient` | `(Config) (*Client, error)` | Create and connect |
+| `ListTools` | `(ctx) ([]*ToolInfo, error)` | List available tools |
+| `CallTool` | `(ctx, name, args) (*ToolResult, error)` | Invoke a tool |
+| `Ping` | `(ctx) error` | Verify connection |
+| `Close` | `() error` | Release resources |
+
+### Server
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `NewServer` | `(ServerConfig) *Server` | Create server |
+| `AddTool` | `(name, desc, schema, handler)` | Register a tool |
+| `HTTPHandler` | `() http.Handler` | Streamable HTTP handler |
+| `GRPCHandler` | `() *grpc.GRPCHandler` | gRPC stream handler |
+| `Close` | `() error` | Release resources |
+
+### Convenience
+
+| Function | Description |
+|----------|-------------|
+| `TextResult(text)` | Single text content item |
+| `ErrorResult(msg)` | Text content with `IsError=true` |
+| `ReadPIDFile(path)` | Parse daemon PID file |
+
+### Config Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `Endpoint` | `string` | -- | Server address (HTTP URL or gRPC host:port) |
+| `PIDFile` | `string` | -- | Daemon PID file path for auto-discovery |
+| `Transport` | `Transport` | `TransportAuto` | `TransportHTTP`, `TransportGRPC`, `TransportStdio`, `TransportAuto` |
+| `Command` | `string` | -- | Executable path for stdio transport |
+| `Args` | `[]string` | -- | Arguments for stdio transport |
+| `BearerToken` | `string` | -- | HTTP auth; auto-read from PID file |
+| `Timeout` | `time.Duration` | `0` (none) | Per-call timeout |
+
+## Package Structure
+
+```
+github.com/goco-ai/emcp-go
+├── emcp.go          -- Client (public API)
+├── server.go        -- Server (public API)
+├── config.go        -- Config, Transport enum
+├── types.go         -- ToolInfo, ToolResult, ContentItem
+├── discovery.go     -- DaemonInfo, ReadPIDFile
+├── grpc/            -- gRPC bidirectional stream transport
+│   ├── transport.go -- GRPCTransport (mcp.Transport)
+│   ├── handler.go   -- GRPCHandler (gRPC -> mcp.Server)
+│   ├── connection.go
+│   ├── errors.go
+│   ├── proto/emcpv1/ -- protobuf service definition
+│   └── typed/       -- Typed gRPC (Google canonical proto)
+└── internal/        -- Implementation (not importable)
+    ├── mcpclient/   -- Client internals
+    └── mcpserver/   -- Server internals
 ```
 
-| Middleware | Purpose |
-|---|---|
-| **Recovery** | Catches panics, logs stack trace via `slog.Logger`, returns JSON-RPC internal error |
-| **Metrics** | `MetricsRecorder` interface with thread-safe `InMemoryRecorder` (atomic counters) |
-| **RiskGate** | `RiskPolicy` interface -- blocks tool calls above configured risk level |
-| **Timeout** | Per-tool `context.WithTimeout` from `map[string]time.Duration` |
+## FAQ
 
-### `toolmeta` -- Tool Annotations
+**Q: Do I need emcp-go to use MCP in Go?**
 
-Enterprise metadata for MCP tools, stored in `Tool.Meta` with `emcp:` namespace prefix.
+No. The [official MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) works standalone. emcp-go adds gRPC transport, unified client, and daemon discovery on top.
 
-```go
-import "github.com/goco-ai/emcp-go/toolmeta"
+**Q: Does emcp-go support Streamable HTTP?**
 
-tool := &mcp.Tool{Name: "delete_database", Description: "Drop all tables"}
-toolmeta.SetRiskLevel(tool, toolmeta.RiskCritical)
-toolmeta.SetRequiresCheckpoint(tool, true)
+Yes. The `HTTPHandler()` method uses `mcp.NewStreamableHTTPHandler` from the official SDK.
 
-level := toolmeta.GetRiskLevel(tool)           // RiskCritical
-needsCP := toolmeta.RequiresCheckpoint(tool)   // true
-```
+**Q: Can I use HTTP and gRPC from the same server?**
 
-Risk levels: `RiskLow`, `RiskMedium`, `RiskHigh`, `RiskCritical`.
+Yes. Create one `emcp.Server`, call both `HTTPHandler()` and `GRPCHandler()`.
 
-## Installation
+**Q: What about SSE transport?**
 
-```bash
-go get github.com/goco-ai/emcp-go@latest
-```
-
-Requires Go 1.27+.
-
-## Testing
-
-```bash
-go test ./... -count=1
-```
-
-37 tests. gRPC tests use `bufconn` for in-memory transport (no TCP, no ports). Middleware tests use `mcp.NewInMemoryTransports()`.
+Not yet. See [ROADMAP.md](ROADMAP.md).
 
 ## Related Projects
 
-- [Official MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) -- Core MCP implementation by Google
-- [GODE](https://github.com/goco-ai/gode) -- Headless Go IDE with 65 MCP tools
-- [GOCO](https://github.com/goco-ai/goco) -- MAP agent framework
+- [Official MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) -- Core MCP implementation
+- [GODE](https://github.com/goco-ai/gode) -- Headless Go IDE with 65 MCP tools (primary consumer)
+- [grpmsoft/daemon](https://github.com/grpmsoft/daemon) -- On-demand daemon lifecycle (PID file format)
+
+## Contributing
+
+Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines and [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License
 
-MIT
+Apache License 2.0. See [LICENSE](LICENSE).

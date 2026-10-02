@@ -1,5 +1,5 @@
-// Copyright 2026 GOCO-AI. All rights reserved.
-// Use of this source code is governed by an MIT-style license.
+// Copyright 2026 GOCO-AI Authors.
+// SPDX-License-Identifier: Apache-2.0
 
 // Package mcpserver implements the MCP server logic. It is internal to
 // emcp-go; external consumers use the thin wrapper in the root emcp package.
