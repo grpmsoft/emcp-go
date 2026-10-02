@@ -6,6 +6,7 @@ package emcp
 import (
 	"context"
 	"net/http"
+	"time"
 
 	emcpgrpc "github.com/grpmsoft/emcp-go/grpc"
 	"github.com/grpmsoft/emcp-go/internal/mcpserver"
@@ -27,6 +28,18 @@ type ServerConfig struct {
 	Version string
 	// Instructions are optional instructions sent to clients via MCP initialize.
 	Instructions string
+
+	// Stateful enables stateful HTTP mode with session tracking.
+	// By default (Stateful=false), the server runs in stateless mode per the
+	// MCP 2026-07-28 spec: no Mcp-Session-Id header, each request gets a
+	// temporary session. Set Stateful=true to enable session persistence
+	// across requests.
+	Stateful bool
+
+	// SessionTimeout configures how long idle sessions survive before
+	// automatic cleanup. Zero means never expire. Only relevant when
+	// Stateful is true.
+	SessionTimeout time.Duration
 }
 
 // Server is a unified MCP server that supports HTTP and gRPC transports.
@@ -52,9 +65,11 @@ type Server struct {
 func NewServer(cfg ServerConfig) *Server {
 	return &Server{
 		impl: mcpserver.New(mcpserver.Config{
-			Name:         cfg.Name,
-			Version:      cfg.Version,
-			Instructions: cfg.Instructions,
+			Name:           cfg.Name,
+			Version:        cfg.Version,
+			Instructions:   cfg.Instructions,
+			Stateless:      !cfg.Stateful,
+			SessionTimeout: cfg.SessionTimeout,
 		}),
 	}
 }

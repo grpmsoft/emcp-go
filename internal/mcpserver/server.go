@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sync"
+	"time"
 
 	emcpgrpc "github.com/grpmsoft/emcp-go/grpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -41,6 +42,16 @@ type Config struct {
 	Name         string
 	Version      string
 	Instructions string
+
+	// Stateless enables stateless HTTP mode (MCP 2026-07-28 spec).
+	// In stateless mode, no Mcp-Session-Id header is used and each request
+	// gets a temporary session. This is the correct mode for short-lived
+	// CLI clients (like GODE daemon consumers). Defaults to true.
+	Stateless bool
+
+	// SessionTimeout configures how long idle sessions survive before
+	// automatic cleanup. Zero means never expire (leaks sessions).
+	SessionTimeout time.Duration
 }
 
 // Server wraps an MCP server and provides a clean internal API for adding
@@ -48,8 +59,10 @@ type Config struct {
 // to the official SDK.
 type Server struct {
 	mcpServer *mcp.Server
+	config    Config
 
 	mu          sync.Mutex
+	httpHandler http.Handler
 	grpcHandler *emcpgrpc.GRPCHandler
 }
 
@@ -76,6 +89,7 @@ func New(cfg Config) *Server {
 			&mcp.Implementation{Name: name, Version: version},
 			opts,
 		),
+		config: cfg,
 	}
 }
 
@@ -118,12 +132,24 @@ func (s *Server) AddTool(name, description string, inputSchema map[string]any, h
 }
 
 // HTTPHandler returns an http.Handler that serves MCP over Streamable HTTP.
+// The handler is created lazily on first call and reused thereafter, ensuring
+// that session state is preserved across HTTP requests from the same client.
 // Mount this on your HTTP mux: mux.Handle("/mcp", srv.HTTPHandler())
 func (s *Server) HTTPHandler() http.Handler {
-	return mcp.NewStreamableHTTPHandler(
-		func(_ *http.Request) *mcp.Server { return s.mcpServer },
-		nil,
-	)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.httpHandler == nil {
+		opts := &mcp.StreamableHTTPOptions{
+			Stateless:      s.config.Stateless,
+			SessionTimeout: s.config.SessionTimeout,
+		}
+		s.httpHandler = mcp.NewStreamableHTTPHandler(
+			func(_ *http.Request) *mcp.Server { return s.mcpServer },
+			opts,
+		)
+	}
+	return s.httpHandler
 }
 
 // GRPCHandler returns the gRPC handler for registering with a grpc.Server.

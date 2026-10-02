@@ -24,8 +24,9 @@ func newTestServer(t *testing.T) *Server {
 	t.Helper()
 
 	srv := NewServer(ServerConfig{
-		Name:    "test-server",
-		Version: "0.1.0",
+		Name:     "test-server",
+		Version:  "0.1.0",
+		Stateful: true, // existing tests use session-based protocol
 	})
 
 	srv.AddTool("echo", "echoes the input", map[string]any{
@@ -132,7 +133,7 @@ func newGRPCServerAndClient(t *testing.T, srv *Server) (*Client, func()) {
 // -- HTTP Tests --
 
 func TestServer_AddToolAndListViaHTTP(t *testing.T) {
-	srv := NewServer(ServerConfig{Name: "list-test", Version: "0.1.0"})
+	srv := NewServer(ServerConfig{Name: "list-test", Version: "0.1.0", Stateful: true})
 	srv.AddTool("ping", "returns pong", nil,
 		func(_ context.Context, _ string, _ map[string]any) (*ToolResult, error) {
 			return TextResult("pong"), nil
@@ -243,7 +244,7 @@ func TestServer_ToolError(t *testing.T) {
 }
 
 func TestServer_NilArgs(t *testing.T) {
-	srv := NewServer(ServerConfig{Name: "nil-args", Version: "0.1.0"})
+	srv := NewServer(ServerConfig{Name: "nil-args", Version: "0.1.0", Stateful: true})
 	srv.AddTool("no_args", "tool with no arguments", nil,
 		func(_ context.Context, _ string, args map[string]any) (*ToolResult, error) {
 			if args == nil {

@@ -80,13 +80,36 @@ func (t *GRPCTransport) Connect(ctx context.Context) (mcp.Connection, error) {
 	// a cancellable context that is cancelled when the connection is closed.
 	streamCtx, streamCancel := context.WithCancel(context.Background())
 
-	stream, err := client.Stream(streamCtx)
-	if err != nil {
+	// Open the stream in a goroutine so we can respect the caller's ctx
+	// deadline. Without this, a slow/unresponsive server would hang the
+	// caller past their deadline (gRPC MinConnectTimeout = 20s by default).
+	type streamResult struct {
+		stream emcpv1.MCPTransport_StreamClient
+		err    error
+	}
+	ch := make(chan streamResult, 1)
+	go func() {
+		s, err := client.Stream(streamCtx)
+		ch <- streamResult{s, err}
+	}()
+
+	var stream emcpv1.MCPTransport_StreamClient
+	select {
+	case res := <-ch:
+		if res.err != nil {
+			streamCancel()
+			if ownedCC != nil {
+				_ = ownedCC.Close()
+			}
+			return nil, fmt.Errorf("failed to open gRPC stream: %w", res.err)
+		}
+		stream = res.stream
+	case <-ctx.Done():
 		streamCancel()
 		if ownedCC != nil {
 			_ = ownedCC.Close()
 		}
-		return nil, fmt.Errorf("failed to open gRPC stream: %w", err)
+		return nil, fmt.Errorf("gRPC connect timed out: %w", ctx.Err())
 	}
 
 	conn := newClientConnection(stream)

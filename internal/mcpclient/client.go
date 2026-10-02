@@ -7,12 +7,16 @@ package mcpclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	emcpgrpc "github.com/grpmsoft/emcp-go/grpc"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -72,7 +76,17 @@ func New(cfg Config) (*Client, error) {
 		),
 	}
 
-	if err := c.connect(context.Background()); err != nil {
+	// Apply the configured timeout to the initial connection attempt.
+	// Without this, a silent server would cause NewClient to hang forever
+	// on context.Background().
+	ctx := context.Background()
+	if cfg.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, cfg.Timeout)
+		defer cancel()
+	}
+
+	if err := c.connect(ctx); err != nil {
 		return nil, err
 	}
 
@@ -114,15 +128,27 @@ func (c *Client) makeTransport() (mcp.Transport, error) {
 func (c *Client) makeHTTPTransport() *mcp.StreamableClientTransport {
 	t := &mcp.StreamableClientTransport{
 		Endpoint: c.config.Endpoint,
+		// Disable SDK retries — they defeat our timeout by retrying
+		// multiple times against a non-responsive server.
+		MaxRetries: -1,
 	}
+
+	// Build a custom HTTP client when we need bearer auth or a timeout.
+	var rt http.RoundTripper = http.DefaultTransport
 	if c.config.BearerToken != "" {
-		t.HTTPClient = &http.Client{
-			Transport: &bearerRoundTripper{
-				token: c.config.BearerToken,
-				next:  http.DefaultTransport,
-			},
+		rt = &bearerRoundTripper{
+			token: c.config.BearerToken,
+			next:  rt,
 		}
 	}
+	if c.config.BearerToken != "" || c.config.Timeout > 0 {
+		httpClient := &http.Client{Transport: rt}
+		if c.config.Timeout > 0 {
+			httpClient.Timeout = c.config.Timeout
+		}
+		t.HTTPClient = httpClient
+	}
+
 	return t
 }
 
@@ -175,9 +201,9 @@ func (c *Client) ListTools(ctx context.Context) (*mcp.ListToolsResult, error) {
 
 	result, err := session.ListTools(ctx, nil)
 	if err != nil {
-		c.mu.Lock()
-		c.session = nil
-		c.mu.Unlock()
+		if isTransportError(err) {
+			c.invalidateSession()
+		}
 		return nil, fmt.Errorf("emcp: ListTools failed: %w", err)
 	}
 
@@ -200,9 +226,9 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]any)
 		Arguments: args,
 	})
 	if err != nil {
-		c.mu.Lock()
-		c.session = nil
-		c.mu.Unlock()
+		if isTransportError(err) {
+			c.invalidateSession()
+		}
 		return nil, fmt.Errorf("emcp: CallTool %q failed: %w", name, err)
 	}
 
@@ -220,9 +246,9 @@ func (c *Client) Ping(ctx context.Context) error {
 	}
 
 	if err := session.Ping(ctx, nil); err != nil {
-		c.mu.Lock()
-		c.session = nil
-		c.mu.Unlock()
+		if isTransportError(err) {
+			c.invalidateSession()
+		}
 		return fmt.Errorf("emcp: Ping failed: %w", err)
 	}
 	return nil
@@ -250,6 +276,65 @@ func (c *Client) Close() error {
 // call. This is exported for test support (the root package test accesses
 // this to simulate session loss).
 func (c *Client) ClearSession() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.session != nil {
+		_ = c.session.Close()
+		c.session = nil
+	}
+}
+
+// isTransportError returns true when the error indicates the session's
+// underlying transport is broken and the session must be discarded.
+// JSON-RPC application errors (tool not found, invalid params, handler
+// errors) return false — the session is still usable.
+func isTransportError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// JSON-RPC structured errors mean the server processed our request and
+	// replied with a protocol-level error. The transport is fine.
+	var rpcErr *jsonrpc.Error
+	if errors.As(err, &rpcErr) {
+		return false
+	}
+
+	// SDK sentinel errors for broken connections/sessions.
+	if errors.Is(err, mcp.ErrConnectionClosed) || errors.Is(err, mcp.ErrSessionMissing) {
+		return true
+	}
+
+	// Underlying I/O errors (EOF, connection reset, etc).
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+
+	// Context errors propagated from a failed transport read/write.
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+
+	// Common connection-level error patterns. These happen when the TCP
+	// connection is broken (server died, network partition, etc).
+	msg := err.Error()
+	for _, needle := range []string{
+		"connection refused",
+		"connection reset",
+		"broken pipe",
+		"use of closed network connection",
+	} {
+		if strings.Contains(msg, needle) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// invalidateSession closes the current session and clears it so the next
+// call will trigger a reconnect. Caller must NOT hold c.mu.
+func (c *Client) invalidateSession() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.session != nil {
