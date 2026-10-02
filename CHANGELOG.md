@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Bearer token authentication: client-side injection (HTTP + gRPC) and server-side verification (`ServerConfig.TokenValidator`)
 - `StaticToken()` helper with `subtle.ConstantTimeCompare`
 - `TextResult()` and `ErrorResult()` convenience constructors
-- Content types: text, image, audio, embedded_resource, resource_link, StructuredContent
+- Content types: text, image, audio, resource, resource_link, StructuredContent
 - Stateless HTTP server by default (MCP 2026-07-28 spec)
 - Session liveness via `done` channel from `session.Wait()`
 - Retry-once on transport error (server restart recovery)

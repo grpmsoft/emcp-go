@@ -4,8 +4,8 @@
 
 Enterprise MCP Extensions for Go -- a unified client+server library built on
 top of the official [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk)
-(v1.8.0). Published under [goco-ai](https://github.com/goco-ai), consumed
-by [GODE](https://github.com/goco-ai/gode) (headless IDE with 65 MCP tools).
+(v1.8.0). Published under [grpmsoft](https://github.com/grpmsoft), consumed
+by GODE (headless Go IDE with 65 MCP tools, primary consumer).
 
 emcp-go adds two capabilities the official SDK does not provide out of the box:
 

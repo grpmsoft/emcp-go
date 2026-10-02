@@ -35,7 +35,7 @@ type ToolResult struct {
 // Currently only text is supported; image and audio fields are reserved
 // for future use.
 type ContentItem struct {
-	Type        string // "text", "image", "audio", "embedded_resource", "resource_link"
+	Type        string // "text", "image", "audio", "resource", "resource_link"
 	Text        string
 	MIMEType    string
 	Data        []byte
@@ -228,7 +228,7 @@ func protoContentToItem(pc *mcppb.CallToolResponse_Content) ContentItem {
 			MIMEType: pc.GetAudio().GetMimeType(),
 		}
 	case pc.GetEmbeddedResource() != nil:
-		item := ContentItem{Type: "embedded_resource"}
+		item := ContentItem{Type: "resource"}
 		if c := pc.GetEmbeddedResource().GetContents(); c != nil {
 			item.URI = c.GetUri()
 			item.MIMEType = c.GetMimeType()
