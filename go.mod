@@ -2,6 +2,8 @@ module github.com/grpmsoft/emcp-go
 
 go 1.27
 
+retract v0.1.0 // tag pointed at an orphan commit not on main branch
+
 require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	google.golang.org/grpc v1.84.0
