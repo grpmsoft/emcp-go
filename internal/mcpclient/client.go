@@ -172,7 +172,7 @@ func (c *Client) makeHTTPTransport() *mcp.StreamableClientTransport {
 	}
 
 	// Build a custom HTTP client when we need bearer auth or a connect timeout.
-	var rt http.RoundTripper = http.DefaultTransport
+	rt := http.RoundTripper(http.DefaultTransport)
 	if c.config.Timeout > 0 {
 		rt = &http.Transport{
 			DialContext: (&net.Dialer{

@@ -56,16 +56,11 @@ func TestAudit_M6_ListToolsDeterministic(t *testing.T) {
 	}
 }
 
-// M6: verifies the service name matches what the generated code actually
-// produces. The proto files use package "mcppb" internally (not the
-// canonical "model_context_protocol" from GoogleCloudPlatform/mcp-grpc-
-// transport-proto). This is a KNOWN wire incompatibility documented in
-// the audit (T7). The hand-edit of ServiceDesc was reverted because the
-// binary descriptors still encoded "mcppb", creating a mismatch.
-// TODO(T7): regenerate from canonical proto with buf to get
-// model_context_protocol.Mcp in both descriptors and ServiceDesc.
+// M6: if the package stays, it must speak the canonical schema
+// (GoogleCloudPlatform/mcp-grpc-transport-proto): service
+// model_context_protocol.Mcp, not mcppb.Mcp.
 func TestAudit_M6_CanonicalServiceName(t *testing.T) {
-	if got := mcppb.Mcp_ServiceDesc.ServiceName; got != "mcppb.Mcp" {
-		t.Errorf("service name %q, want mcppb.Mcp (matches binary descriptors; canonical requires proto regeneration)", got)
+	if got := mcppb.Mcp_ServiceDesc.ServiceName; got != "model_context_protocol.Mcp" {
+		t.Errorf("service name %q is not the canonical model_context_protocol.Mcp; no canonical client can reach this server", got)
 	}
 }

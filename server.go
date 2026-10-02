@@ -6,10 +6,15 @@ package emcp
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	emcpgrpc "github.com/grpmsoft/emcp-go/grpc"
 	"github.com/grpmsoft/emcp-go/internal/mcpserver"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 // ToolHandler is the handler function for an MCP tool. It receives the tool
@@ -40,6 +45,17 @@ type ServerConfig struct {
 	// automatic cleanup. Zero means never expire. Only relevant when
 	// Stateful is true.
 	SessionTimeout time.Duration
+
+	// TokenValidator, when non-nil, enables server-side bearer token
+	// verification. For HTTP, incoming requests must carry an
+	// "Authorization: Bearer <token>" header; for gRPC, the "authorization"
+	// metadata key must be set. The validator is called with the raw token
+	// (without the "Bearer " prefix). If it returns false, the request is
+	// rejected with 401 Unauthorized (HTTP) or codes.Unauthenticated (gRPC).
+	//
+	// When nil (the default), no authentication is enforced and all
+	// requests are accepted. This preserves backwards compatibility.
+	TokenValidator func(token string) bool
 }
 
 // Server is a unified MCP server that supports HTTP and gRPC transports.
@@ -58,7 +74,8 @@ type ServerConfig struct {
 //	mux.Handle("/mcp", srv.HTTPHandler())
 //	http.ListenAndServe(":8080", mux)
 type Server struct {
-	impl *mcpserver.Server
+	impl           *mcpserver.Server
+	tokenValidator func(token string) bool
 }
 
 // NewServer creates a new MCP server with the given configuration.
@@ -71,6 +88,7 @@ func NewServer(cfg ServerConfig) *Server {
 			Stateless:      !cfg.Stateful,
 			SessionTimeout: cfg.SessionTimeout,
 		}),
+		tokenValidator: cfg.TokenValidator,
 	}
 }
 
@@ -89,14 +107,67 @@ func (s *Server) AddTool(name, description string, inputSchema map[string]any, h
 
 // HTTPHandler returns an http.Handler for serving MCP over Streamable HTTP.
 // Mount this on your HTTP mux: mux.Handle("/mcp", srv.HTTPHandler())
+//
+// When ServerConfig.TokenValidator is set, the returned handler rejects
+// requests that do not carry a valid "Authorization: Bearer <token>" header
+// with 401 Unauthorized before they reach the MCP layer.
 func (s *Server) HTTPHandler() http.Handler {
-	return s.impl.HTTPHandler()
+	h := s.impl.HTTPHandler()
+	if s.tokenValidator == nil {
+		return h
+	}
+	return &bearerAuthMiddleware{
+		next:     h,
+		validate: s.tokenValidator,
+	}
 }
 
 // GRPCHandler returns the gRPC handler for registering with a grpc.Server.
 // Use: emcpv1.RegisterMCPTransportServer(grpcServer, srv.GRPCHandler())
+//
+// When ServerConfig.TokenValidator is set, callers should register the
+// stream interceptor returned by GRPCAuthInterceptor() on the grpc.Server
+// to enforce bearer token verification on incoming streams.
 func (s *Server) GRPCHandler() *emcpgrpc.GRPCHandler {
 	return s.impl.GRPCHandler()
+}
+
+// GRPCAuthInterceptor returns a grpc.StreamServerInterceptor that verifies
+// bearer tokens from the "authorization" metadata key. Returns nil when no
+// TokenValidator is configured (no auth required).
+//
+// Usage:
+//
+//	interceptor := srv.GRPCAuthInterceptor()
+//	opts := []grpc.ServerOption{}
+//	if interceptor != nil {
+//	    opts = append(opts, grpc.StreamInterceptor(interceptor))
+//	}
+//	gs := grpc.NewServer(opts...)
+func (s *Server) GRPCAuthInterceptor() grpc.StreamServerInterceptor {
+	if s.tokenValidator == nil {
+		return nil
+	}
+	validate := s.tokenValidator
+	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		md, ok := metadata.FromIncomingContext(ss.Context())
+		if !ok {
+			return status.Error(codes.Unauthenticated, "missing metadata")
+		}
+		vals := md.Get("authorization")
+		if len(vals) == 0 {
+			return status.Error(codes.Unauthenticated, "missing authorization metadata")
+		}
+		token := vals[0]
+		const prefix = "Bearer "
+		if !strings.HasPrefix(token, prefix) {
+			return status.Error(codes.Unauthenticated, "authorization must use Bearer scheme")
+		}
+		if !validate(strings.TrimPrefix(token, prefix)) {
+			return status.Error(codes.Unauthenticated, "invalid bearer token")
+		}
+		return handler(srv, ss)
+	}
 }
 
 // Internal returns the underlying MCP server for advanced use cases.
@@ -129,6 +200,29 @@ func ErrorResult(msg string) *ToolResult {
 		IsError: true,
 		Content: []ContentItem{{Type: "text", Text: msg}},
 	}
+}
+
+// bearerAuthMiddleware is an http.Handler that extracts and validates a
+// Bearer token from the Authorization header before delegating to the next
+// handler. Invalid or missing tokens are rejected with 401 Unauthorized.
+type bearerAuthMiddleware struct {
+	next     http.Handler
+	validate func(token string) bool
+}
+
+func (m *bearerAuthMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	auth := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	if !strings.HasPrefix(auth, prefix) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	token := strings.TrimPrefix(auth, prefix)
+	if !m.validate(token) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	m.next.ServeHTTP(w, r)
 }
 
 // toInternalResult converts a public ToolResult to the internal representation.
