@@ -3,7 +3,7 @@
 
 package emcp
 
-import "github.com/goco-ai/emcp-go/internal/mcpclient"
+import "github.com/grpmsoft/emcp-go/internal/mcpclient"
 
 // DaemonInfo holds the data read from a daemon PID file.
 type DaemonInfo struct {

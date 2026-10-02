@@ -51,7 +51,7 @@ internal/
 ### Client
 
 ```go
-import "github.com/goco-ai/emcp-go"
+import "github.com/grpmsoft/emcp-go"
 
 client, err := emcp.NewClient(emcp.Config{
     Endpoint:  "http://localhost:8094/mcp",
@@ -78,7 +78,7 @@ client, err := emcp.NewClient(emcp.Config{
 ### Server
 
 ```go
-import "github.com/goco-ai/emcp-go"
+import "github.com/grpmsoft/emcp-go"
 
 srv := emcp.NewServer(emcp.ServerConfig{
     Name:    "my-server",
@@ -104,8 +104,8 @@ http.ListenAndServe(":8080", mux)
 
 ```go
 import (
-    emcpgrpc "github.com/goco-ai/emcp-go/grpc"
-    emcpv1 "github.com/goco-ai/emcp-go/grpc/proto/emcpv1"
+    emcpgrpc "github.com/grpmsoft/emcp-go/grpc"
+    emcpv1 "github.com/grpmsoft/emcp-go/grpc/proto/emcpv1"
     "google.golang.org/grpc"
 )
 
@@ -117,7 +117,7 @@ grpcServer.Serve(listener)
 ### gRPC Client
 
 ```go
-import emcpgrpc "github.com/goco-ai/emcp-go/grpc"
+import emcpgrpc "github.com/grpmsoft/emcp-go/grpc"
 
 client, err := emcp.NewClient(emcp.Config{
     Endpoint:  "localhost:50051",

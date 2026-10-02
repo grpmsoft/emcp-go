@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/goco-ai/emcp-go/grpc/typed/proto/mcppb"
+	"github.com/grpmsoft/emcp-go/grpc/typed/proto/mcppb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

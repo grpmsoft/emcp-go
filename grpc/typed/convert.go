@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/goco-ai/emcp-go/grpc/typed/proto/mcppb"
+	"github.com/grpmsoft/emcp-go/grpc/typed/proto/mcppb"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/protobuf/types/known/structpb"
 )

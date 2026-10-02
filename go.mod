@@ -1,4 +1,4 @@
-module github.com/goco-ai/emcp-go
+module github.com/grpmsoft/emcp-go
 
 go 1.27
 

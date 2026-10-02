@@ -21,7 +21,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/goco-ai/emcp-go/internal/mcpclient"
+	"github.com/grpmsoft/emcp-go/internal/mcpclient"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

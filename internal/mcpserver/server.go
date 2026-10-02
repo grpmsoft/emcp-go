@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"sync"
 
-	emcpgrpc "github.com/goco-ai/emcp-go/grpc"
+	emcpgrpc "github.com/grpmsoft/emcp-go/grpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

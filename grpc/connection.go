@@ -11,7 +11,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 
-	emcpv1 "github.com/goco-ai/emcp-go/grpc/proto/emcpv1"
+	emcpv1 "github.com/grpmsoft/emcp-go/grpc/proto/emcpv1"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	emcpgrpc "github.com/goco-ai/emcp-go/grpc"
+	emcpgrpc "github.com/grpmsoft/emcp-go/grpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

@@ -7,8 +7,8 @@ import (
 	"context"
 	"net/http"
 
-	emcpgrpc "github.com/goco-ai/emcp-go/grpc"
-	"github.com/goco-ai/emcp-go/internal/mcpserver"
+	emcpgrpc "github.com/grpmsoft/emcp-go/grpc"
+	"github.com/grpmsoft/emcp-go/internal/mcpserver"
 )
 
 // ToolHandler is the handler function for an MCP tool. It receives the tool

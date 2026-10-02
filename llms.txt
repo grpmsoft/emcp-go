@@ -2,7 +2,7 @@
 
 > Enterprise MCP Extensions for Go -- unified client+server library built on the official MCP Go SDK. gRPC bidirectional stream transport, PID file discovery, bearer auth.
 
-Module: github.com/goco-ai/emcp-go
+Module: github.com/grpmsoft/emcp-go
 Go: 1.27+
 License: Apache-2.0
 Organization: goco-ai (github.com/goco-ai)
@@ -102,7 +102,7 @@ internal/
 
 ## Links
 
-- [README](https://github.com/goco-ai/emcp-go/blob/main/README.md)
-- [AGENTS.md](https://github.com/goco-ai/emcp-go/blob/main/AGENTS.md)
-- [CONTRIBUTING.md](https://github.com/goco-ai/emcp-go/blob/main/CONTRIBUTING.md)
-- [pkg.go.dev](https://pkg.go.dev/github.com/goco-ai/emcp-go)
+- [README](https://github.com/grpmsoft/emcp-go/blob/main/README.md)
+- [AGENTS.md](https://github.com/grpmsoft/emcp-go/blob/main/AGENTS.md)
+- [CONTRIBUTING.md](https://github.com/grpmsoft/emcp-go/blob/main/CONTRIBUTING.md)
+- [pkg.go.dev](https://pkg.go.dev/github.com/grpmsoft/emcp-go)

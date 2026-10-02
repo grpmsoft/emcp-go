@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goco-ai/emcp-go/grpc/typed/proto/mcppb"
+	"github.com/grpmsoft/emcp-go/grpc/typed/proto/mcppb"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

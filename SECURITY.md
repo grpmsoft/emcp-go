@@ -3,7 +3,7 @@
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability in emcp-go, please report it privately
-through [GitHub Security Advisories](https://github.com/goco-ai/emcp-go/security/advisories/new).
+through [GitHub Security Advisories](https://github.com/grpmsoft/emcp-go/security/advisories/new).
 
 Alternatively, email a.kolkov@gmail.com with details.
 

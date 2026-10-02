@@ -1,9 +1,9 @@
 # emcp-go
 
-[![CI](https://github.com/goco-ai/emcp-go/actions/workflows/ci.yml/badge.svg)](https://github.com/goco-ai/emcp-go/actions/workflows/ci.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/goco-ai/emcp-go.svg)](https://pkg.go.dev/github.com/goco-ai/emcp-go)
-[![codecov](https://codecov.io/gh/goco-ai/emcp-go/branch/main/graph/badge.svg)](https://codecov.io/gh/goco-ai/emcp-go)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/goco-ai/emcp-go)](https://github.com/goco-ai/emcp-go/blob/main/go.mod)
+[![CI](https://github.com/grpmsoft/emcp-go/actions/workflows/ci.yml/badge.svg)](https://github.com/grpmsoft/emcp-go/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/grpmsoft/emcp-go.svg)](https://pkg.go.dev/github.com/grpmsoft/emcp-go)
+[![codecov](https://codecov.io/gh/grpmsoft/emcp-go/branch/main/graph/badge.svg)](https://codecov.io/gh/grpmsoft/emcp-go)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/grpmsoft/emcp-go)](https://github.com/grpmsoft/emcp-go/blob/main/go.mod)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 **Enterprise MCP Extensions for Go -- unified client+server library built on the official [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk).**
@@ -37,7 +37,7 @@ The official MCP Go SDK provides the protocol implementation. emcp-go adds what 
 ## Installation
 
 ```bash
-go get github.com/goco-ai/emcp-go@latest
+go get github.com/grpmsoft/emcp-go@latest
 ```
 
 Requires Go 1.27+.
@@ -192,7 +192,7 @@ The `grpc/typed/` package provides an alternative with native protobuf messages 
 ## Package Structure
 
 ```
-github.com/goco-ai/emcp-go
+github.com/grpmsoft/emcp-go
 ├── emcp.go          -- Client (public API)
 ├── server.go        -- Server (public API)
 ├── config.go        -- Config, Transport enum
