@@ -70,9 +70,10 @@ func (c *TypedMCPClient) ListTools(ctx context.Context) ([]*ToolInfo, error) {
 }
 
 // CallTool invokes a tool by name with the given arguments. The arguments
-// map is converted to a proto Struct for transmission.
+// map is converted to a proto Struct for transmission. The canonical proto
+// nests name and arguments inside a Request sub-message.
 func (c *TypedMCPClient) CallTool(ctx context.Context, name string, args map[string]any) (*ToolResult, error) {
-	req := &mcppb.CallToolRequest{
+	inner := &mcppb.CallToolRequest_Request{
 		Name: name,
 	}
 	if len(args) > 0 {
@@ -80,7 +81,10 @@ func (c *TypedMCPClient) CallTool(ctx context.Context, name string, args map[str
 		if err != nil {
 			return nil, fmt.Errorf("converting arguments: %w", err)
 		}
-		req.Arguments = s
+		inner.Arguments = s
+	}
+	req := &mcppb.CallToolRequest{
+		Request: inner,
 	}
 	resp, err := c.client.CallTool(ctx, req)
 	if err != nil {

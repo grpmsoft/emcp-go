@@ -111,15 +111,20 @@ func protoToolToInfo(pt *mcppb.Tool) *ToolInfo {
 // --- Proto CallToolRequest -> tool name + JSON args ---
 
 // protoCallToolArgs extracts the tool name and JSON-encoded arguments from
-// a proto CallToolRequest.
+// a proto CallToolRequest. The canonical proto nests name and arguments
+// inside a Request sub-message (field 2).
 func protoCallToolArgs(req *mcppb.CallToolRequest) (name string, argsJSON json.RawMessage, err error) {
-	name = req.GetName()
+	inner := req.GetRequest()
+	if inner == nil {
+		return "", nil, fmt.Errorf("CallToolRequest.request is required")
+	}
+	name = inner.GetName()
 	if name == "" {
 		return "", nil, fmt.Errorf("tool name is required")
 	}
 
-	if req.GetArguments() != nil {
-		argsJSON, err = json.Marshal(req.GetArguments().AsMap())
+	if inner.GetArguments() != nil {
+		argsJSON, err = json.Marshal(inner.GetArguments().AsMap())
 		if err != nil {
 			return "", nil, fmt.Errorf("marshaling arguments: %w", err)
 		}
@@ -199,6 +204,10 @@ func protoContentToItem(pc *mcppb.CallToolResponse_Content) ContentItem {
 			Data:     pc.GetAudio().GetData(),
 			MIMEType: pc.GetAudio().GetMimeType(),
 		}
+	case pc.GetEmbeddedResource() != nil:
+		return ContentItem{Type: "embedded_resource"}
+	case pc.GetResourceLink() != nil:
+		return ContentItem{Type: "resource_link"}
 	default:
 		return ContentItem{Type: "text"}
 	}
