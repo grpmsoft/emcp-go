@@ -61,37 +61,15 @@ type TypedGRPCHandler struct {
 
 	mu    sync.RWMutex
 	tools map[string]*registeredTool
-
-	// getServer returns the shared MCP server for future bridging.
-	// It is currently stored but not used for tool dispatch (the local
-	// registry is used instead). When non-nil, it enables future
-	// integration where tools registered via emcp.Server.AddTool become
-	// visible through the typed transport.
-	getServer func() *mcp.Server
 }
 
 // Compile-time check: TypedGRPCHandler implements mcppb.McpServer.
 var _ mcppb.McpServer = (*TypedGRPCHandler)(nil)
 
-// NewTypedGRPCHandler creates a new TypedGRPCHandler with an empty tool
-// registry. An optional getServer function can be provided to associate
-// the handler with a shared *mcp.Server for future bridging. Pass nil
-// for standalone usage.
-func NewTypedGRPCHandler(opts ...func(*TypedGRPCHandler)) *TypedGRPCHandler {
-	h := &TypedGRPCHandler{
+// NewTypedGRPCHandler creates a new TypedGRPCHandler with an empty tool registry.
+func NewTypedGRPCHandler() *TypedGRPCHandler {
+	return &TypedGRPCHandler{
 		tools: make(map[string]*registeredTool),
-	}
-	for _, opt := range opts {
-		opt(h)
-	}
-	return h
-}
-
-// WithMCPServer returns an option that associates the handler with a
-// shared *mcp.Server via a factory function.
-func WithMCPServer(getServer func() *mcp.Server) func(*TypedGRPCHandler) {
-	return func(h *TypedGRPCHandler) {
-		h.getServer = getServer
 	}
 }
 

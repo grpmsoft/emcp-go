@@ -183,15 +183,15 @@ message MCPMessage {
 }
 ```
 
-The `grpc/typed/` package provides an alternative with native protobuf messages
-for each MCP method (Initialize, Ping, ListTools, CallTool) using the Google
-canonical proto for MCP-over-gRPC.
+The `grpc/typed/` package (experimental) provides an alternative with native protobuf messages
+for MCP methods (ListTools, CallTool implemented; 6 RPCs return Unimplemented) using the Google
+canonical proto (`GoogleCloudPlatform/mcp-grpc-transport-proto@1d2216c`). Standalone tool registry.
 
 ## Ecosystem
 
 | Repo | Relationship |
 |------|-------------|
-| [GODE](https://github.com/goco-ai/gode) | Consumer -- headless IDE with 65 MCP tools |
+| [GODE](https://github.com/grpmsoft/gode) | Consumer -- headless IDE with 65 MCP tools |
 | [grpmsoft/daemon](https://github.com/grpmsoft/daemon) | Complementary -- daemon lifecycle; PID file format |
 | [Official MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) | Foundation -- emcp-go builds on top |
 

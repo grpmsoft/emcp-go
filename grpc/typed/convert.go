@@ -35,10 +35,14 @@ type ToolResult struct {
 // Currently only text is supported; image and audio fields are reserved
 // for future use.
 type ContentItem struct {
-	Type     string // "text", "image", or "audio"
-	Text     string
-	MIMEType string
-	Data     []byte
+	Type        string // "text", "image", "audio", "embedded_resource", "resource_link"
+	Text        string
+	MIMEType    string
+	Data        []byte
+	URI         string
+	Name        string
+	Title       string
+	Description string
 }
 
 // --- MCP Tool -> Proto Tool ---
@@ -180,6 +184,25 @@ func contentToProto(c mcp.Content) *mcppb.CallToolResponse_Content {
 			Data:     v.Data,
 			MimeType: v.MIMEType,
 		}
+	case *mcp.EmbeddedResource:
+		er := &mcppb.EmbeddedResource{}
+		if v.Resource != nil {
+			er.Contents = &mcppb.ResourceContents{
+				Uri:      v.Resource.URI,
+				MimeType: v.Resource.MIMEType,
+				Text:     v.Resource.Text,
+				Blob:     v.Resource.Blob,
+			}
+		}
+		pc.EmbeddedResource = er
+	case *mcp.ResourceLink:
+		pc.ResourceLink = &mcppb.Resource{
+			Uri:         v.URI,
+			Name:        v.Name,
+			Title:       v.Title,
+			Description: v.Description,
+			MimeType:    v.MIMEType,
+		}
 	}
 	return pc
 }
@@ -205,9 +228,24 @@ func protoContentToItem(pc *mcppb.CallToolResponse_Content) ContentItem {
 			MIMEType: pc.GetAudio().GetMimeType(),
 		}
 	case pc.GetEmbeddedResource() != nil:
-		return ContentItem{Type: "embedded_resource"}
+		item := ContentItem{Type: "embedded_resource"}
+		if c := pc.GetEmbeddedResource().GetContents(); c != nil {
+			item.URI = c.GetUri()
+			item.MIMEType = c.GetMimeType()
+			item.Text = c.GetText()
+			item.Data = c.GetBlob()
+		}
+		return item
 	case pc.GetResourceLink() != nil:
-		return ContentItem{Type: "resource_link"}
+		r := pc.GetResourceLink()
+		return ContentItem{
+			Type:        "resource_link",
+			URI:         r.GetUri(),
+			Name:        r.GetName(),
+			Title:       r.GetTitle(),
+			Description: r.GetDescription(),
+			MIMEType:    r.GetMimeType(),
+		}
 	default:
 		return ContentItem{Type: "text"}
 	}
