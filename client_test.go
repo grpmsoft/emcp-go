@@ -90,7 +90,7 @@ func TestClient_HTTP_ListTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -121,7 +121,7 @@ func TestClient_HTTP_CallTool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -152,7 +152,7 @@ func TestClient_HTTP_CallToolEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -193,7 +193,7 @@ func TestClient_HTTP_ToolError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -224,7 +224,7 @@ func TestClient_HTTP_Ping(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -277,7 +277,7 @@ func TestClient_HTTP_ConcurrentCalls(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	const numGoroutines = 10
 	var wg sync.WaitGroup
@@ -366,7 +366,7 @@ func TestClient_HTTP_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -464,7 +464,7 @@ func TestClient_HTTP_BearerToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	mu.Lock()
 	auth := gotAuth
@@ -489,7 +489,7 @@ func TestClient_HTTP_Reconnect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -531,7 +531,7 @@ func TestClient_HTTP_Timeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	// With a generous timeout, the call should succeed.
 	ctx := context.Background()
@@ -596,7 +596,7 @@ func TestClient_GRPC_ListTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient gRPC failed: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -624,7 +624,7 @@ func TestClient_GRPC_CallTool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient gRPC failed: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -652,7 +652,7 @@ func TestClient_GRPC_Ping(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient gRPC failed: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -696,7 +696,7 @@ func TestClient_PIDFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient with PIDFile failed: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -765,7 +765,7 @@ func TestClient_PIDFile_WithToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	if gotAuth != "Bearer pid-file-token" {
 		t.Errorf("expected 'Bearer pid-file-token', got %q", gotAuth)

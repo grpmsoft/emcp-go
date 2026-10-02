@@ -6,6 +6,7 @@ package typed
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -73,8 +74,8 @@ func setupHandler(t *testing.T, configure func(h *TypedGRPCHandler)) *testEnv {
 	env.grpcServer = grpc.NewServer()
 	mcppb.RegisterMcpServer(env.grpcServer, handler)
 	go func() {
-		if err := env.grpcServer.Serve(env.lis); err != nil {
-			// Serve returns non-nil when Stop/GracefulStop is called; expected.
+		if err := env.grpcServer.Serve(env.lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			t.Logf("grpc serve: %v", err)
 		}
 	}()
 

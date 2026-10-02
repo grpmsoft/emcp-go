@@ -5,6 +5,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -97,8 +98,8 @@ func setupServer(t *testing.T, configure func(s *mcp.Server)) *testEnv {
 	handler := NewGRPCHandler(func() *mcp.Server { return mcpServer })
 	emcpv1.RegisterMCPTransportServer(env.grpcServer, handler)
 	go func() {
-		if err := env.grpcServer.Serve(env.lis); err != nil {
-			// Serve returns non-nil when Stop/GracefulStop is called; expected.
+		if err := env.grpcServer.Serve(env.lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			t.Logf("grpc serve: %v", err)
 		}
 	}()
 
