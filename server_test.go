@@ -90,7 +90,7 @@ func newHTTPServerAndClient(t *testing.T, srv *Server) (*Client, func()) {
 	}
 
 	return client, func() {
-		client.Close()
+		_ = client.Close()
 		ts.Close()
 	}
 }
@@ -123,7 +123,7 @@ func newGRPCServerAndClient(t *testing.T, srv *Server) (*Client, func()) {
 	}
 
 	return client, func() {
-		client.Close()
+		_ = client.Close()
 		grpcServer.Stop()
 		_ = lis.Close()
 	}
@@ -196,7 +196,7 @@ func TestServer_HTTPHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
