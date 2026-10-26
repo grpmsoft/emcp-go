@@ -35,7 +35,11 @@ Two capabilities: (1) Unified Client connecting via HTTP/gRPC/stdio with one New
 ### Server
 
 - NewServer(ServerConfig) *Server
-- Server.AddTool(name, description, inputSchema, handler)
+- AddTool[In, Out](s, Tool, TypedToolHandler[In, Out]) -- typed tool (recommended): schema
+  inferred from In, args validated before the handler, Out as structured content, errors as
+  tool errors
+- InferSchema[T]() (*jsonschema.Schema, error) -- start point for enums, ranges, defaults
+- Server.AddTool(name, description, inputSchema, handler) -- untyped, map[string]any args
 - Server.HTTPHandler() http.Handler -- Streamable HTTP
 - Server.GRPCHandler() *grpc.GRPCHandler -- register with grpc.Server
 - Server.Close() error
@@ -50,9 +54,16 @@ Two capabilities: (1) Unified Client connecting via HTTP/gRPC/stdio with one New
 
 func(ctx context.Context, name string, args map[string]any) (*ToolResult, error)
 
+### Typed tools
+
+- Tool -- Name, Title, Description, InputSchema/OutputSchema (*jsonschema.Schema, nil = inferred),
+  Annotations
+- ToolAnnotations -- ReadOnlyHint, DestructiveHint (*bool), IdempotentHint, OpenWorldHint (*bool)
+- TypedToolHandler[In, Out] -- func(ctx, in In) (*ToolResult, Out, error)
+
 ### Result Types
 
-- ToolInfo -- Name, Title, Description, InputSchema
+- ToolInfo -- Name, Title, Description, InputSchema, OutputSchema, Annotations
 - ToolResult -- Content []ContentItem, IsError bool
 - ContentItem -- Type (text/image/audio), Text, MIMEType, Data
 - TextResult(text) -- convenience: single text content item

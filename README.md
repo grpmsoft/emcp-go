@@ -74,20 +74,57 @@ srv := emcp.NewServer(emcp.ServerConfig{
     Version: "1.0.0",
 })
 
-srv.AddTool("echo", "echoes the input", map[string]any{
-    "type": "object",
-    "properties": map[string]any{
-        "msg": map[string]any{"type": "string"},
-    },
-}, func(ctx context.Context, name string, args map[string]any) (*emcp.ToolResult, error) {
-    msg, _ := args["msg"].(string)
-    return emcp.TextResult("echo: " + msg), nil
+type EchoIn struct {
+    Msg string `json:"msg" jsonschema:"text to echo back"`
+}
+type EchoOut struct {
+    Echo string `json:"echo"`
+}
+
+emcp.AddTool(srv, emcp.Tool{
+    Name:        "echo",
+    Description: "Echoes the input.",
+    Annotations: &emcp.ToolAnnotations{ReadOnlyHint: true},
+}, func(ctx context.Context, in EchoIn) (*emcp.ToolResult, EchoOut, error) {
+    return nil, EchoOut{Echo: in.Msg}, nil
 })
 
 mux := http.NewServeMux()
 mux.Handle("/mcp", srv.HTTPHandler())
 http.ListenAndServe(":8080", mux)
 ```
+
+### Typed tools
+
+`emcp.AddTool[In, Out]` registers a tool from Go types, on top of the official SDK's
+`mcp.AddTool`:
+
+- the input schema is inferred from `In` (a struct or map), with property descriptions from the
+  `jsonschema` struct tag; fields without `omitempty`/`omitzero` are required, unknown properties
+  are rejected;
+- arguments are validated against the schema, with its defaults applied, before the handler runs;
+- `Out` is sent as structured content with an inferred output schema, and as JSON text when the
+  result has no content of its own;
+- a validation failure or a handler error reaches the client as a tool error (`IsError`) with the
+  reason, never as a protocol failure;
+- `Tool.Annotations` carries the MCP behaviour hints (read-only, destructive, idempotent, open
+  world).
+
+Struct tags carry only descriptions. For enums, ranges and defaults start from the inferred
+schema and set them:
+
+```go
+schema, _ := emcp.InferSchema[ShotIn]()
+schema.Properties["format"].Enum = []any{"png", "jpeg", "webp"}
+schema.Properties["scale"].Minimum = ptr(0.1)
+emcp.AddTool(srv, emcp.Tool{Name: "shot", InputSchema: schema}, handler)
+```
+
+Schemas are `*jsonschema.Schema` from `github.com/google/jsonschema-go`, the package the official
+SDK uses as well; it is the one type from outside emcp-go in the public API.
+
+The untyped `Server.AddTool(name, desc, schema, handler)` with `map[string]any` arguments stays
+for dynamic tools whose shape is known only at run time.
 
 ## Three Modes
 
@@ -120,7 +157,7 @@ Serve MCP tools over HTTP and/or gRPC from the same server instance:
 
 ```go
 srv := emcp.NewServer(emcp.ServerConfig{Name: "tools", Version: "1.0.0"})
-srv.AddTool("greet", "say hello", schema, handler)
+emcp.AddTool(srv, emcp.Tool{Name: "greet", Description: "Says hello."}, greet)
 
 // HTTP
 mux.Handle("/mcp", srv.HTTPHandler())
@@ -164,7 +201,9 @@ The `grpc/typed/` package provides an **experimental** alternative with native p
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `NewServer` | `(ServerConfig) *Server` | Create server |
-| `AddTool` | `(name, desc, schema, handler)` | Register a tool |
+| `emcp.AddTool[In, Out]` | `(s, Tool, TypedToolHandler[In, Out])` | Register a typed tool (recommended) |
+| `emcp.InferSchema[T]` | `() (*jsonschema.Schema, error)` | Schema inferred for T, to tune |
+| `AddTool` | `(name, desc, schema, handler)` | Register an untyped tool (`map[string]any` args) |
 | `HTTPHandler` | `() http.Handler` | Streamable HTTP handler |
 | `GRPCHandler` | `() *grpc.GRPCHandler` | gRPC stream handler |
 | `Close` | `() error` | Release resources |

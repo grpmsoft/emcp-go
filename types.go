@@ -10,6 +10,11 @@ type ToolInfo struct {
 	Title       string
 	Description string
 	InputSchema map[string]any
+	// OutputSchema is the schema of the tool's structured result; nil when the
+	// tool declares none.
+	OutputSchema map[string]any
+	// Annotations are the tool's behaviour hints; nil when it declares none.
+	Annotations *ToolAnnotations
 }
 
 // ToolResult is a clean Go representation of an MCP tool call result.
