@@ -270,6 +270,41 @@ func TestAddTool_BehindAuth(t *testing.T) {
 	})
 }
 
+type optsIn struct {
+	Size int `json:"size,omitempty" jsonschema:"size, default 7"`
+}
+
+type optsOut struct {
+	Size int `json:"size"`
+}
+
+// TestAddTool_NullArgumentsWithDefaults reproduces a crash: a call without
+// arguments arrives as "arguments": null, and the SDK panicked writing the
+// schema defaults into the nil map it decoded, killing the server process.
+func TestAddTool_NullArgumentsWithDefaults(t *testing.T) {
+	srv := NewServer(ServerConfig{Name: "typed", Version: "0.2.0"})
+	schema, err := InferSchema[optsIn]()
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema.Properties["size"].Default = json.RawMessage(`7`)
+	AddTool(srv, Tool{Name: "opts", InputSchema: schema},
+		func(_ context.Context, in optsIn) (*ToolResult, optsOut, error) {
+			return nil, optsOut(in), nil
+		})
+
+	typedTransports(t, srv, func(t *testing.T, client *Client) {
+		// The emcp client sends a nil args map as JSON null.
+		res, err := client.CallTool(callCtx(t), "opts", nil)
+		if err != nil {
+			t.Fatalf("CallTool: %v", err)
+		}
+		if res.IsError || res.StructuredContent["size"] != float64(7) {
+			t.Fatalf("result = %+v, want size 7 from the default", res)
+		}
+	})
+}
+
 func TestAddTool_PanicsOnNonObjectInput(t *testing.T) {
 	defer func() {
 		if recover() == nil {
