@@ -126,6 +126,28 @@ SDK uses as well; it is the one type from outside emcp-go in the public API.
 The untyped `Server.AddTool(name, desc, schema, handler)` with `map[string]any` arguments stays
 for dynamic tools whose shape is known only at run time.
 
+A client reads a structured result into its own type: `ToolResult.StructuredContent` is raw JSON
+(`json.RawMessage`), whatever the tool's `Out` is (object, array or primitive):
+
+```go
+var out ShotOut
+err := json.Unmarshal(res.StructuredContent, &out)
+```
+
+### Robustness
+
+- A panic in a tool handler, or in the SDK's handling of its arguments, becomes a tool error that
+  names the tool; the server keeps serving. The stack goes to `ServerConfig.Logger`
+  (default `slog.Default()`).
+- `"arguments": null` is accepted for tools whose schema has defaults (a go-sdk v1.8.0 panic,
+  worked around until the next go-sdk release).
+- Over HTTP, a client that disconnects cancels the running handler's ctx: go-sdk's
+  `PropagateRequestCancellation`, on by default (`ServerConfig.DisableRequestCancellation` turns
+  it off). It applies only to clients on MCP protocol 2026-07-28 or later, such as the emcp client.
+  Older clients cannot cancel a running call; Claude Code's bundled MCP SDK names 2025-11-25 as
+  its latest version, so assume its calls run to their end. Give every tool that can wait long a
+  bound of its own.
+
 ## Three Modes
 
 ### Client Mode

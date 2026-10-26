@@ -49,6 +49,8 @@ Two capabilities: (1) Unified Client connecting via HTTP/gRPC/stdio with one New
 - Name (string) -- server name in MCP initialize
 - Version (string) -- server version
 - Instructions (string) -- optional client instructions
+- Logger (*slog.Logger) -- emcp's own logs; nil = slog.Default
+- DisableRequestCancellation (bool) -- default: an HTTP client disconnect cancels the handler (protocol >= 2026-07-28)
 
 ### ToolHandler
 
@@ -58,13 +60,13 @@ func(ctx context.Context, name string, args map[string]any) (*ToolResult, error)
 
 - Tool -- Name, Title, Description, InputSchema/OutputSchema (*jsonschema.Schema, nil = inferred),
   Annotations
-- ToolAnnotations -- ReadOnlyHint, DestructiveHint (*bool), IdempotentHint, OpenWorldHint (*bool)
+- ToolAnnotations -- Title, ReadOnlyHint, DestructiveHint (*bool), IdempotentHint, OpenWorldHint (*bool)
 - TypedToolHandler[In, Out] -- func(ctx, in In) (*ToolResult, Out, error)
 
 ### Result Types
 
 - ToolInfo -- Name, Title, Description, InputSchema, OutputSchema, Annotations
-- ToolResult -- Content []ContentItem, IsError bool
+- ToolResult -- Content []ContentItem, StructuredContent json.RawMessage, IsError bool
 - ContentItem -- Type (text/image/audio), Text, MIMEType, Data
 - TextResult(text) -- convenience: single text content item
 - ErrorResult(msg) -- convenience: text with IsError=true

@@ -3,6 +3,8 @@
 
 package emcp
 
+import "encoding/json"
+
 // ToolInfo is a clean Go representation of an MCP tool definition.
 // It deliberately avoids exposing any official SDK types in the public API.
 type ToolInfo struct {
@@ -22,9 +24,11 @@ type ToolResult struct {
 	// Content holds the content items returned by the tool.
 	Content []ContentItem
 	// StructuredContent holds the structured result of the tool call (per
-	// SEP-2106). It may be any valid JSON value conforming to the tool's
-	// OutputSchema.
-	StructuredContent map[string]any
+	// SEP-2106) as raw JSON: any value conforming to the tool's OutputSchema,
+	// an object, an array or a primitive. A client decodes it into its own
+	// type with json.Unmarshal; a server setting it must give valid JSON.
+	// Typed tools (AddTool) set it from their Out value. Nil when absent.
+	StructuredContent json.RawMessage
 	// IsError is true when the tool reported an application-level error.
 	IsError bool
 }
