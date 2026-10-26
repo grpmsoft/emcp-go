@@ -474,7 +474,9 @@ func TestHTTP_ClientDisconnectCancelsHandler(t *testing.T) {
 				t.Fatal("handler did not start")
 			}
 			cancel()
-			_ = <-done // the call fails with the cancelled ctx; only the handler matters here
+			if err := <-done; err == nil {
+				t.Error("the call succeeded although its ctx was cancelled")
+			}
 
 			select {
 			case <-cancelled:
