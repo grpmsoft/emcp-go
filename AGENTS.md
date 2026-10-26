@@ -28,6 +28,8 @@ server.go       -- Server: NewServer, AddTool, HTTPHandler, GRPCHandler, Close
                    TextResult, ErrorResult, toInternalResult
 config.go       -- Config (Endpoint, PIDFile, Transport, Command, Args,
                    BearerToken, Timeout), Transport enum
+tool.go         -- typed tools: AddTool[In, Out], Tool, ToolAnnotations,
+                   TypedToolHandler, InferSchema
 types.go        -- ToolInfo, ToolResult, ContentItem
 discovery.go    -- DaemonInfo, ReadPIDFile, ErrPIDFileNotFound, ErrPIDFileEmpty
 grpc/
@@ -43,7 +45,8 @@ grpc/typed/
   proto/mcppb/  -- Google canonical proto for MCP-over-gRPC
 internal/
   mcpclient/    -- Client implementation (session management, reconnect, bearer auth)
-  mcpserver/    -- Server implementation (tool dispatch, argument extraction)
+  mcpserver/    -- Server implementation (tool dispatch, argument extraction;
+                   typed.go: AddTypedTool over the SDK's generic mcp.AddTool)
 ```
 
 ## Quick Start
@@ -85,15 +88,26 @@ srv := emcp.NewServer(emcp.ServerConfig{
     Version: "1.0.0",
 })
 
-srv.AddTool("echo", "echoes the input", map[string]any{
-    "type": "object",
-    "properties": map[string]any{
-        "msg": map[string]any{"type": "string"},
-    },
-}, func(ctx context.Context, name string, args map[string]any) (*emcp.ToolResult, error) {
-    msg, _ := args["msg"].(string)
-    return emcp.TextResult("echo: " + msg), nil
+// Typed tool: schema from EchoIn, arguments validated before the handler,
+// EchoOut sent as structured content. Prefer it to the untyped Server.AddTool.
+type EchoIn struct {
+    Msg string `json:"msg" jsonschema:"text to echo back"`
+}
+type EchoOut struct {
+    Echo string `json:"echo"`
+}
+
+emcp.AddTool(srv, emcp.Tool{
+    Name:        "echo",
+    Description: "Echoes the input.",
+    Annotations: &emcp.ToolAnnotations{ReadOnlyHint: true},
+}, func(ctx context.Context, in EchoIn) (*emcp.ToolResult, EchoOut, error) {
+    return nil, EchoOut{Echo: in.Msg}, nil
 })
+
+// Enums, ranges, defaults: tune the inferred schema and pass it in Tool.InputSchema.
+schema, _ := emcp.InferSchema[EchoIn]()
+schema.Properties["msg"].MaxLength = ptr(200)
 
 mux := http.NewServeMux()
 mux.Handle("/mcp", srv.HTTPHandler())
@@ -150,9 +164,19 @@ client, err := emcp.NewClient(emcp.Config{
 
 - **ToolHandler** -- `func(ctx, name string, args map[string]any) (*ToolResult, error)`
 
+- **AddTool[In, Out]** -- `emcp.AddTool(s, Tool, TypedToolHandler[In, Out])`, typed tools over the
+  SDK's `mcp.AddTool`. Validation failures and handler errors become tool errors (`IsError`).
+  Panics at registration on an invalid tool (In not a struct or map).
+- **Tool** -- Name, Title, Description, InputSchema/OutputSchema (`*jsonschema.Schema`, nil =
+  inferred), Annotations
+- **ToolAnnotations** -- ReadOnlyHint, DestructiveHint (*bool), IdempotentHint, OpenWorldHint (*bool)
+- **TypedToolHandler[In, Out]** -- `func(ctx, in In) (*ToolResult, Out, error)`; return a non-nil
+  result only for extra content such as an image
+- **InferSchema[T]** -- the schema AddTool infers for T, to tune
+
 ### Result Types
 
-- **ToolInfo** -- Name, Title, Description, InputSchema
+- **ToolInfo** -- Name, Title, Description, InputSchema, OutputSchema, Annotations
 - **ToolResult** -- Content []ContentItem, IsError bool
 - **ContentItem** -- Type ("text"/"image"/"audio"), Text, MIMEType, Data
 

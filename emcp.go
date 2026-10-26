@@ -87,9 +87,13 @@ func (c *Client) ListTools(ctx context.Context) ([]*ToolInfo, error) {
 			Name:        t.Name,
 			Title:       t.Title,
 			Description: t.Description,
+			Annotations: toolAnnotationsFromSDK(t.Annotations),
 		}
 		if m, ok := t.InputSchema.(map[string]any); ok {
 			info.InputSchema = m
+		}
+		if m, ok := t.OutputSchema.(map[string]any); ok {
+			info.OutputSchema = m
 		}
 		tools = append(tools, info)
 	}

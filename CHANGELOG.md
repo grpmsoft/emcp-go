@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Typed tools: `emcp.AddTool[In, Out](s, Tool, TypedToolHandler[In, Out])` over the official
+  SDK's `mcp.AddTool`. The input schema is inferred from `In` (descriptions from the `jsonschema`
+  struct tag), arguments are validated against it with defaults applied before the handler runs,
+  `Out` is returned as structured content with an output schema, and validation failures and
+  handler errors reach the client as tool errors. Served by `HTTPHandler` and `GRPCHandler`
+  behind the same authentication as untyped tools.
+- `Tool` (with `InputSchema`/`OutputSchema` overrides) and `ToolAnnotations` (read-only,
+  destructive, idempotent, open-world hints).
+- `InferSchema[T]` to start from the inferred schema and add enums, ranges and defaults.
+- `ToolInfo.OutputSchema` and `ToolInfo.Annotations` on the client side.
+
+### Changed
+
+- `github.com/google/jsonschema-go` is a direct dependency: `*jsonschema.Schema` appears in the
+  public API (`Tool`, `InferSchema`), as in the official SDK.
+
 ## [0.1.1] - 2026-10-02
 
 ### Added
