@@ -305,6 +305,38 @@ func TestAddTool_NullArgumentsWithDefaults(t *testing.T) {
 	})
 }
 
+// TestToolPanicIsToolError checks that a panicking tool, typed or untyped,
+// costs one call a tool error and leaves the server serving.
+func TestToolPanicIsToolError(t *testing.T) {
+	srv := NewServer(ServerConfig{Name: "typed", Version: "0.2.0"})
+	AddTool(srv, Tool{Name: "boom"}, func(_ context.Context, _ snapIn) (*ToolResult, snapOut, error) {
+		panic("typed handler bug")
+	})
+	srv.AddTool("boom_untyped", "panics", nil, func(_ context.Context, _ string, _ map[string]any) (*ToolResult, error) {
+		panic("untyped handler bug")
+	})
+	srv.AddTool("ok", "works", nil, func(_ context.Context, _ string, _ map[string]any) (*ToolResult, error) {
+		return TextResult("fine"), nil
+	})
+
+	typedTransports(t, srv, func(t *testing.T, client *Client) {
+		for tool, want := range map[string]string{"boom": "typed handler bug", "boom_untyped": "untyped handler bug"} {
+			res, err := client.CallTool(callCtx(t), tool, map[string]any{})
+			if err != nil {
+				t.Fatalf("%s: protocol error %v, want a tool error", tool, err)
+			}
+			if !res.IsError || len(res.Content) == 0 || !strings.Contains(res.Content[0].Text, want) ||
+				!strings.Contains(res.Content[0].Text, tool) {
+				t.Fatalf("%s: result %+v, want a tool error naming the tool and the panic", tool, res)
+			}
+		}
+		res, err := client.CallTool(callCtx(t), "ok", nil)
+		if err != nil || res.IsError || res.Content[0].Text != "fine" {
+			t.Fatalf("server after the panics: %+v, %v", res, err)
+		}
+	})
+}
+
 func TestAddTool_PanicsOnNonObjectInput(t *testing.T) {
 	defer func() {
 		if recover() == nil {

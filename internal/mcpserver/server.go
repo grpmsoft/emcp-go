@@ -9,7 +9,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"net/http"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -112,10 +115,45 @@ func New(cfg Config) *Server {
 	}
 
 	srv := mcp.NewServer(&mcp.Implementation{Name: name, Version: version}, opts)
-	srv.AddReceivingMiddleware(dropNullArguments)
+	// recoverToolPanics wraps everything else, dropNullArguments included.
+	srv.AddReceivingMiddleware(recoverToolPanics, dropNullArguments)
 	return &Server{
 		mcpServer: srv,
 		config:    cfg,
+	}
+}
+
+// recoverToolPanics turns a panic during a tools/call, in the tool's handler or
+// in the SDK's handling of its arguments, into a tool error. The SDK serves
+// each request in a goroutine without a recover, so a panic would end the
+// server process: for a daemon shared by many clients, one bad call would cut
+// them all off. Receiving middleware runs in that same goroutine and wraps the
+// SDK's dispatch, so the recover here sees the panic. The stack goes to
+// slog.Default; the client gets the tool name and the panic value.
+func recoverToolPanics(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(ctx context.Context, method string, req mcp.Request) (res mcp.Result, err error) {
+		call, ok := req.(*mcp.CallToolRequest)
+		if !ok {
+			return next(ctx, method, req)
+		}
+		defer func() {
+			p := recover()
+			if p == nil {
+				return
+			}
+			name := ""
+			if call.Params != nil {
+				name = call.Params.Name
+			}
+			slog.Error("emcp: panic in tool call", "tool", name, "panic", p, "stack", string(debug.Stack()))
+			res, err = &mcp.CallToolResult{
+				IsError: true,
+				Content: []mcp.Content{&mcp.TextContent{
+					Text: fmt.Sprintf("tool %q failed with an internal error: %v", name, p),
+				}},
+			}, nil
+		}()
+		return next(ctx, method, req)
 	}
 }
 
