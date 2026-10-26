@@ -8,6 +8,7 @@ package emcp_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -197,7 +198,7 @@ func TestR7_ServerSideContentFidelity(t *testing.T) {
 				{Type: "resource_link", URI: "file:///etc/hosts", Name: "hosts", MIMEType: "text/plain"},
 				{Type: "resource", Resource: &emcp.ResourceContents{URI: "mem://x", MIMEType: "text/plain", Text: "embedded"}},
 			},
-			StructuredContent: map[string]any{"answer": 42},
+			StructuredContent: json.RawMessage(`{"answer":42}`),
 		}, nil
 	})
 	ts := httptest.NewServer(srv.HTTPHandler())

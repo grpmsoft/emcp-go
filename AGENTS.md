@@ -97,17 +97,23 @@ type EchoOut struct {
     Echo string `json:"echo"`
 }
 
+// Enums, ranges, defaults: tune the inferred schema BEFORE registering and
+// pass it in Tool.InputSchema (nil InputSchema means the plain inferred one).
+schema, _ := emcp.InferSchema[EchoIn]()
+schema.Properties["msg"].MaxLength = ptr(200)
+
 emcp.AddTool(srv, emcp.Tool{
     Name:        "echo",
     Description: "Echoes the input.",
-    Annotations: &emcp.ToolAnnotations{ReadOnlyHint: true},
+    InputSchema: schema,
+    Annotations: &emcp.ToolAnnotations{Title: "Echo", ReadOnlyHint: true},
 }, func(ctx context.Context, in EchoIn) (*emcp.ToolResult, EchoOut, error) {
     return nil, EchoOut{Echo: in.Msg}, nil
 })
 
-// Enums, ranges, defaults: tune the inferred schema and pass it in Tool.InputSchema.
-schema, _ := emcp.InferSchema[EchoIn]()
-schema.Properties["msg"].MaxLength = ptr(200)
+// A client reads the structured result into its own type:
+//   var out EchoOut
+//   err := json.Unmarshal(res.StructuredContent, &out)
 
 mux := http.NewServeMux()
 mux.Handle("/mcp", srv.HTTPHandler())
@@ -159,6 +165,8 @@ client, err := emcp.NewClient(emcp.Config{
   - `Name` (string) -- server name sent in MCP initialize
   - `Version` (string) -- server version
   - `Instructions` (string) -- optional instructions
+  - `Logger` (*slog.Logger) -- emcp's own logs (recovered tool panics); nil = slog.Default
+  - `DisableRequestCancellation` (bool) -- by default a client disconnect over HTTP cancels the tool handler's ctx (protocol >= 2026-07-28 clients only)
 
 - **Server** -- methods: `AddTool(name, desc, schema, handler)`, `HTTPHandler()`, `GRPCHandler()`, `Close()`
 
@@ -169,7 +177,7 @@ client, err := emcp.NewClient(emcp.Config{
   Panics at registration on an invalid tool (In not a struct or map).
 - **Tool** -- Name, Title, Description, InputSchema/OutputSchema (`*jsonschema.Schema`, nil =
   inferred), Annotations
-- **ToolAnnotations** -- ReadOnlyHint, DestructiveHint (*bool), IdempotentHint, OpenWorldHint (*bool)
+- **ToolAnnotations** -- Title, ReadOnlyHint, DestructiveHint (*bool), IdempotentHint, OpenWorldHint (*bool)
 - **TypedToolHandler[In, Out]** -- `func(ctx, in In) (*ToolResult, Out, error)`; return a non-nil
   result only for extra content such as an image
 - **InferSchema[T]** -- the schema AddTool infers for T, to tune
@@ -177,7 +185,7 @@ client, err := emcp.NewClient(emcp.Config{
 ### Result Types
 
 - **ToolInfo** -- Name, Title, Description, InputSchema, OutputSchema, Annotations
-- **ToolResult** -- Content []ContentItem, IsError bool
+- **ToolResult** -- Content []ContentItem, StructuredContent json.RawMessage (raw JSON of the structured result; decode with json.Unmarshal), IsError bool
 - **ContentItem** -- Type ("text"/"image"/"audio"), Text, MIMEType, Data
 
 ### Convenience Constructors

@@ -4,12 +4,16 @@
 package emcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -57,7 +61,7 @@ func newTypedServer(t *testing.T, cfg ServerConfig) *Server {
 		Name:        "greet",
 		Description: "greets someone",
 		InputSchema: schema,
-		Annotations: &ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
+		Annotations: &ToolAnnotations{Title: "Greeter", ReadOnlyHint: true, OpenWorldHint: ptr(false)},
 	}, func(_ context.Context, in greetIn) (*ToolResult, greetOut, error) {
 		if strings.TrimSpace(in.Name) == "" {
 			return nil, greetOut{}, errNoName
@@ -84,6 +88,17 @@ func newTypedServer(t *testing.T, cfg ServerConfig) *Server {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// structured decodes a result's structured content into T, the way a client
+// of a typed tool reads it.
+func structured[T any](t *testing.T, res *ToolResult) T {
+	t.Helper()
+	var v T
+	if err := json.Unmarshal(res.StructuredContent, &v); err != nil {
+		t.Fatalf("structured content %s: %v", res.StructuredContent, err)
+	}
+	return v
+}
 
 // typedTransports runs f against srv over HTTP and over the gRPC stream
 // transport: typed tools must behave the same on both.
@@ -142,8 +157,8 @@ func TestAddTool_ListsSchemasAndAnnotations(t *testing.T) {
 			t.Error("OutputSchema = nil, want the schema inferred from greetOut")
 		}
 		a := greet.Annotations
-		if a == nil || !a.ReadOnlyHint || a.OpenWorldHint == nil || *a.OpenWorldHint {
-			t.Errorf("annotations = %+v, want readOnly and a closed world", a)
+		if a == nil || a.Title != "Greeter" || !a.ReadOnlyHint || a.OpenWorldHint == nil || *a.OpenWorldHint {
+			t.Errorf("annotations = %+v, want the title, readOnly and a closed world", a)
 		}
 
 		if byName["echo"] == nil || byName["echo"].OutputSchema != nil || byName["echo"].Annotations != nil {
@@ -162,11 +177,12 @@ func TestAddTool_CallReturnsStructuredResult(t *testing.T) {
 		if res.IsError {
 			t.Fatalf("IsError: %+v", res.Content)
 		}
-		if got := res.StructuredContent["greeting"]; got != "HELLO ANN" {
-			t.Errorf("structured greeting = %v, want HELLO ANN", got)
+		got := structured[greetOut](t, res)
+		if got.Greeting != "HELLO ANN" {
+			t.Errorf("structured greeting = %q, want HELLO ANN", got.Greeting)
 		}
-		if got := res.StructuredContent["count"]; got != float64(1) {
-			t.Errorf("structured count = %v, want 1: the schema default must apply", got)
+		if got.Count != 1 {
+			t.Errorf("structured count = %d, want 1: the schema default must apply", got.Count)
 		}
 		if len(res.Content) != 1 || !strings.Contains(res.Content[0].Text, `"greeting":"HELLO ANN"`) {
 			t.Errorf("content = %+v, want the JSON text fallback", res.Content)
@@ -184,8 +200,8 @@ func TestAddTool_ExtraContentKeepsStructuredResult(t *testing.T) {
 		if len(res.Content) != 1 || res.Content[0].Type != "image" || res.Content[0].MIMEType != "image/png" {
 			t.Fatalf("content = %+v, want the handler's image only", res.Content)
 		}
-		if res.StructuredContent["width"] != float64(2) {
-			t.Errorf("structured = %v, want the Out value", res.StructuredContent)
+		if got := structured[snapOut](t, res); got != (snapOut{Width: 2, Height: 1}) {
+			t.Errorf("structured = %+v, want the Out value", got)
 		}
 	})
 }
@@ -299,7 +315,7 @@ func TestAddTool_NullArgumentsWithDefaults(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CallTool: %v", err)
 		}
-		if res.IsError || res.StructuredContent["size"] != float64(7) {
+		if res.IsError || structured[optsOut](t, res).Size != 7 {
 			t.Fatalf("result = %+v, want size 7 from the default", res)
 		}
 	})
@@ -308,7 +324,7 @@ func TestAddTool_NullArgumentsWithDefaults(t *testing.T) {
 // TestToolPanicIsToolError checks that a panicking tool, typed or untyped,
 // costs one call a tool error and leaves the server serving.
 func TestToolPanicIsToolError(t *testing.T) {
-	srv := NewServer(ServerConfig{Name: "typed", Version: "0.2.0"})
+	srv := NewServer(ServerConfig{Name: "typed", Version: "0.2.0", Logger: slog.New(slog.DiscardHandler)})
 	AddTool(srv, Tool{Name: "boom"}, func(_ context.Context, _ snapIn) (*ToolResult, snapOut, error) {
 		panic("typed handler bug")
 	})
@@ -356,5 +372,120 @@ func TestInferSchema(t *testing.T) {
 	}
 	if s.Type != "object" || s.Properties["name"] == nil || s.Properties["name"].Description != "who to greet" {
 		t.Fatalf("schema = %+v, want an object with described properties", s)
+	}
+}
+
+type listIn struct{}
+
+// TestAddTool_NonObjectOutReachesClient checks that a typed tool whose Out
+// is not an object (allowed by SEP-2106) still reaches an emcp client as
+// structured content, not only as text.
+func TestAddTool_NonObjectOutReachesClient(t *testing.T) {
+	srv := NewServer(ServerConfig{Name: "typed", Version: "0.2.0"})
+	AddTool(srv, Tool{Name: "list"}, func(_ context.Context, _ listIn) (*ToolResult, []string, error) {
+		return nil, []string{"a", "b"}, nil
+	})
+	typedTransports(t, srv, func(t *testing.T, client *Client) {
+		res, err := client.CallTool(callCtx(t), "list", nil)
+		if err != nil || res.IsError {
+			t.Fatalf("CallTool = %+v, %v", res, err)
+		}
+		if got := structured[[]string](t, res); len(got) != 2 || got[0] != "a" || got[1] != "b" {
+			t.Errorf("structured = %v, want [a b]", got)
+		}
+	})
+}
+
+// TestServerConfig_LoggerGetsRecoveredPanic checks that a recovered tool
+// panic goes to the configured logger, with the tool's name.
+func TestServerConfig_LoggerGetsRecoveredPanic(t *testing.T) {
+	var buf syncBuffer
+	srv := NewServer(ServerConfig{
+		Name:   "typed",
+		Logger: slog.New(slog.NewTextHandler(&buf, nil)),
+	})
+	srv.AddTool("boom", "panics", nil, func(_ context.Context, _ string, _ map[string]any) (*ToolResult, error) {
+		panic("logged bug")
+	})
+	client, cleanup := newHTTPServerAndClient(t, srv)
+	defer cleanup()
+	if res, err := client.CallTool(callCtx(t), "boom", nil); err != nil || !res.IsError {
+		t.Fatalf("CallTool = %+v, %v", res, err)
+	}
+	if out := buf.String(); !strings.Contains(out, "panic in tool call") || !strings.Contains(out, "tool=boom") ||
+		!strings.Contains(out, "logged bug") {
+		t.Errorf("log = %q, want the recovered panic with the tool name", out)
+	}
+}
+
+// syncBuffer is a bytes.Buffer safe for the logger's and the test's goroutines.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+type waitIn struct{}
+
+// TestHTTP_ClientDisconnectCancelsHandler checks that a client giving up a
+// call over HTTP cancels the handler (the emcp client speaks protocol
+// 2026-07-28), and that DisableRequestCancellation keeps it running.
+func TestHTTP_ClientDisconnectCancelsHandler(t *testing.T) {
+	for _, disable := range []bool{false, true} {
+		t.Run(fmt.Sprintf("disabled=%v", disable), func(t *testing.T) {
+			srv := NewServer(ServerConfig{Name: "typed", DisableRequestCancellation: disable})
+			started := make(chan struct{}, 1)
+			cancelled := make(chan struct{}, 1)
+			release := make(chan struct{})
+			AddTool(srv, Tool{Name: "wait"}, func(ctx context.Context, _ waitIn) (*ToolResult, any, error) {
+				started <- struct{}{}
+				select {
+				case <-ctx.Done():
+					cancelled <- struct{}{}
+				case <-release:
+				}
+				return nil, nil, nil
+			})
+			client, cleanup := newHTTPServerAndClient(t, srv)
+			defer cleanup()
+			// Let a handler that keeps running end before the server closes.
+			defer close(release)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan error, 1)
+			go func() {
+				_, err := client.CallTool(ctx, "wait", nil)
+				done <- err
+			}()
+			select {
+			case <-started:
+			case <-time.After(5 * time.Second):
+				t.Fatal("handler did not start")
+			}
+			cancel()
+			_ = <-done // the call fails with the cancelled ctx; only the handler matters here
+
+			select {
+			case <-cancelled:
+				if disable {
+					t.Error("handler cancelled although cancellation is disabled")
+				}
+			case <-time.After(2 * time.Second):
+				if !disable {
+					t.Error("handler still running 2 s after the client gave up")
+				}
+			}
+		})
 	}
 }

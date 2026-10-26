@@ -38,6 +38,9 @@ type Tool struct {
 // ToolAnnotations are hints about a tool's behaviour (MCP tool annotations).
 // Clients may use them for confirmation prompts; they are not guarantees.
 type ToolAnnotations struct {
+	// Title is a human-readable name for the tool, for clients that read the
+	// annotations rather than Tool.Title.
+	Title string
 	// ReadOnlyHint: the tool does not modify its environment. Default false.
 	ReadOnlyHint bool
 	// DestructiveHint: the tool may make destructive updates. Meaningful only
@@ -61,7 +64,10 @@ type ToolAnnotations struct {
 //
 // A returned error is reported to the client as a tool error (IsError with
 // the error's text), as are arguments that fail validation, so the model sees
-// why the call failed. A cancelled ctx surfaces the same way, as its error.
+// why the call failed. ctx ends when the server shuts down and, over HTTP,
+// when a client on protocol 2026-07-28 or later disconnects (see
+// ServerConfig.DisableRequestCancellation); older clients cannot cancel a
+// running call, so a handler that can wait long needs a bound of its own.
 type TypedToolHandler[In, Out any] func(ctx context.Context, in In) (*ToolResult, Out, error)
 
 // AddTool registers a typed tool on s. In must be a struct or a map: its JSON
@@ -105,6 +111,7 @@ func (a *ToolAnnotations) toSDK() *mcp.ToolAnnotations {
 		return nil
 	}
 	return &mcp.ToolAnnotations{
+		Title:           a.Title,
 		ReadOnlyHint:    a.ReadOnlyHint,
 		DestructiveHint: a.DestructiveHint,
 		IdempotentHint:  a.IdempotentHint,
@@ -117,6 +124,7 @@ func toolAnnotationsFromSDK(a *mcp.ToolAnnotations) *ToolAnnotations {
 		return nil
 	}
 	return &ToolAnnotations{
+		Title:           a.Title,
 		ReadOnlyHint:    a.ReadOnlyHint,
 		DestructiveHint: a.DestructiveHint,
 		IdempotentHint:  a.IdempotentHint,

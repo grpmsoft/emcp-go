@@ -19,6 +19,7 @@ package emcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/grpmsoft/emcp-go/internal/mcpclient"
@@ -133,10 +134,12 @@ func convertCallToolResult(r *mcp.CallToolResult) *ToolResult {
 	for _, c := range r.Content {
 		result.Content = append(result.Content, convertContent(c))
 	}
-	// Preserve StructuredContent if present.
+	// Preserve StructuredContent if present, whatever its JSON type. The SDK
+	// decoded it into an any; re-encoding gives the caller raw JSON to decode
+	// into its own type.
 	if r.StructuredContent != nil {
-		if m, ok := r.StructuredContent.(map[string]any); ok {
-			result.StructuredContent = m
+		if raw, err := json.Marshal(r.StructuredContent); err == nil {
+			result.StructuredContent = raw
 		}
 	}
 	return result

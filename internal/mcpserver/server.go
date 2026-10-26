@@ -30,7 +30,7 @@ type ToolHandler func(ctx context.Context, name string, args map[string]any) (*T
 // The root emcp package converts between this and its own public ToolResult.
 type ToolResult struct {
 	Content           []ContentItem
-	StructuredContent map[string]any
+	StructuredContent json.RawMessage
 	IsError           bool
 }
 
@@ -82,6 +82,15 @@ type Config struct {
 	// gRPC auth works even when the consumer forgets to register the
 	// GRPCAuthInterceptor on the grpc.Server.
 	TokenValidator func(string) bool
+
+	// Logger receives emcp's own logs, such as a recovered tool panic.
+	// Nil means slog.Default().
+	Logger *slog.Logger
+
+	// DisableRequestCancellation keeps a tool handler running after its HTTP
+	// request ended. By default a client disconnect cancels the handler's ctx
+	// (go-sdk's PropagateRequestCancellation; protocol >= 2026-07-28 only).
+	DisableRequestCancellation bool
 }
 
 // Server wraps an MCP server and provides a clean internal API for adding
@@ -114,9 +123,14 @@ func New(cfg Config) *Server {
 		}
 	}
 
+	logger := cfg.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	srv := mcp.NewServer(&mcp.Implementation{Name: name, Version: version}, opts)
 	// recoverToolPanics wraps everything else, dropNullArguments included.
-	srv.AddReceivingMiddleware(recoverToolPanics, dropNullArguments)
+	srv.AddReceivingMiddleware(recoverToolPanics(logger), dropNullArguments)
 	return &Server{
 		mcpServer: srv,
 		config:    cfg,
@@ -129,8 +143,14 @@ func New(cfg Config) *Server {
 // server process: for a daemon shared by many clients, one bad call would cut
 // them all off. Receiving middleware runs in that same goroutine and wraps the
 // SDK's dispatch, so the recover here sees the panic. The stack goes to
-// slog.Default; the client gets the tool name and the panic value.
-func recoverToolPanics(next mcp.MethodHandler) mcp.MethodHandler {
+// logger; the client gets the tool name and the panic value.
+func recoverToolPanics(logger *slog.Logger) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return recoverToolPanicsHandler(logger, next)
+	}
+}
+
+func recoverToolPanicsHandler(logger *slog.Logger, next mcp.MethodHandler) mcp.MethodHandler {
 	return func(ctx context.Context, method string, req mcp.Request) (res mcp.Result, err error) {
 		call, ok := req.(*mcp.CallToolRequest)
 		if !ok {
@@ -145,7 +165,7 @@ func recoverToolPanics(next mcp.MethodHandler) mcp.MethodHandler {
 			if call.Params != nil {
 				name = call.Params.Name
 			}
-			slog.Error("emcp: panic in tool call", "tool", name, "panic", p, "stack", string(debug.Stack()))
+			logger.Error("emcp: panic in tool call", "tool", name, "panic", p, "stack", string(debug.Stack()))
 			res, err = &mcp.CallToolResult{
 				IsError: true,
 				Content: []mcp.Content{&mcp.TextContent{
@@ -226,6 +246,9 @@ func (s *Server) HTTPHandler() http.Handler {
 		opts := &mcp.StreamableHTTPOptions{
 			Stateless:      s.config.Stateless,
 			SessionTimeout: s.config.SessionTimeout,
+			// A handler whose client hung up cannot deliver its result:
+			// cancel it rather than let it run to its own end.
+			PropagateRequestCancellation: !s.config.DisableRequestCancellation,
 		}
 		s.httpHandler = mcp.NewStreamableHTTPHandler(
 			func(_ *http.Request) *mcp.Server { return s.mcpServer },

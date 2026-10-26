@@ -6,6 +6,7 @@ package emcp
 import (
 	"context"
 	"crypto/subtle"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -57,6 +58,19 @@ type ServerConfig struct {
 	// When nil (the default), no authentication is enforced and all
 	// requests are accepted. This preserves backwards compatibility.
 	TokenValidator func(token string) bool
+
+	// Logger receives emcp's own logs, such as the stack of a recovered tool
+	// panic. Nil means slog.Default().
+	Logger *slog.Logger
+
+	// DisableRequestCancellation keeps a tool handler running after its HTTP
+	// request ended. By default (false) a client that disconnects cancels the
+	// handler's ctx, since the result can no longer be delivered. This applies
+	// to clients on MCP protocol 2026-07-28 or later, where one POST is the
+	// whole request (the emcp client is one); with older protocols the
+	// handler's ctx does not end with the request, so long tools still need
+	// a bound of their own.
+	DisableRequestCancellation bool
 }
 
 // Server is a unified MCP server that supports HTTP and gRPC transports.
@@ -89,6 +103,9 @@ func NewServer(cfg ServerConfig) *Server {
 			Stateless:      !cfg.Stateful,
 			SessionTimeout: cfg.SessionTimeout,
 			TokenValidator: cfg.TokenValidator,
+			Logger:         cfg.Logger,
+
+			DisableRequestCancellation: cfg.DisableRequestCancellation,
 		}),
 		tokenValidator: cfg.TokenValidator,
 	}

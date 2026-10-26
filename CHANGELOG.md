@@ -15,24 +15,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `Out` is returned as structured content with an output schema, and validation failures and
   handler errors reach the client as tool errors. Served by `HTTPHandler` and `GRPCHandler`
   behind the same authentication as untyped tools.
-- `Tool` (with `InputSchema`/`OutputSchema` overrides) and `ToolAnnotations` (read-only,
+- `Tool` (with `InputSchema`/`OutputSchema` overrides) and `ToolAnnotations` (title, read-only,
   destructive, idempotent, open-world hints).
 - `InferSchema[T]` to start from the inferred schema and add enums, ranges and defaults.
 - `ToolInfo.OutputSchema` and `ToolInfo.Annotations` on the client side.
-
-### Fixed
-
-- A `tools/call` with `"arguments": null` to a tool whose schema has defaults no longer crashes
-  the server. The SDK (v1.8.0) decoded null into a nil map and panicked writing the defaults into
-  it, in the request goroutine, which ends the process. A receiving middleware now treats null
-  arguments as absent. Workaround until the go-sdk release after v1.8.0 (upstream fix 0f18bc76,
-  #1343).
+- Typed tools accept `"arguments": null` (sent for a call without arguments) also when their
+  schema has defaults: go-sdk v1.8.0 panics on it (fixed upstream in 0f18bc76, #1343, unreleased),
+  so a receiving middleware treats null as absent until emcp-go moves to the next go-sdk release.
 - A panic during a tool call, in the handler or in the SDK's argument handling, becomes a tool
-  error naming the tool instead of ending the server process; the stack goes to `slog.Default`.
-  One bad call no longer cuts off every client of a shared daemon.
+  error naming the tool instead of ending the server process; one bad call no longer cuts off
+  every client of a shared daemon. The stack goes to `ServerConfig.Logger`.
+- `ServerConfig.Logger` (`*slog.Logger`, default `slog.Default()`) for emcp's own logs.
+- Over HTTP, a client that disconnects cancels the running tool handler's ctx (go-sdk's
+  `PropagateRequestCancellation`), for clients on protocol 2026-07-28 or later, such as the emcp
+  client. Older clients cannot cancel a running call, so long tools still need their own bound.
+  `ServerConfig.DisableRequestCancellation` turns it off.
 
 ### Changed
 
+- **Breaking (0.x minor):** `ToolResult.StructuredContent` is `json.RawMessage` instead of
+  `map[string]any`, so any JSON value fits (SEP-2106 allows arrays and primitives; the map dropped
+  them) and callers decode it into their own type. Migration: a client replaces
+  `res.StructuredContent["k"]` with `json.Unmarshal(res.StructuredContent, &out)`; a server sets
+  `StructuredContent: json.RawMessage(...)` or uses a typed tool, whose `Out` fills it.
 - `github.com/google/jsonschema-go` is a direct dependency: `*jsonschema.Schema` appears in the
   public API (`Tool`, `InferSchema`), as in the official SDK.
 
