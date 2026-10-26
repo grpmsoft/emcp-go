@@ -41,6 +41,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `github.com/google/jsonschema-go` is a direct dependency: `*jsonschema.Schema` appears in the
   public API (`Tool`, `InferSchema`), as in the official SDK.
 
+### Security
+
+- `golang.org/x/net` v0.57.0 → v0.61.0 (with `x/sync`, `x/sys`, `x/text`): fixes the HTTP/2
+  advisories GO-2026-6603, GO-2026-6610, GO-2026-6611, GO-2026-6612 and GO-2026-6617, reachable
+  through the gRPC transport and the HTTP client.
+
 ## [0.1.1] - 2026-10-02
 
 ### Added
