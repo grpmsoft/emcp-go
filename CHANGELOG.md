@@ -25,7 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - A `tools/call` with `"arguments": null` to a tool whose schema has defaults no longer crashes
   the server. The SDK (v1.8.0) decoded null into a nil map and panicked writing the defaults into
   it, in the request goroutine, which ends the process. A receiving middleware now treats null
-  arguments as absent.
+  arguments as absent. Workaround until the go-sdk release after v1.8.0 (upstream fix 0f18bc76,
+  #1343).
+- A panic during a tool call, in the handler or in the SDK's argument handling, becomes a tool
+  error naming the tool instead of ending the server process; the stack goes to `slog.Default`.
+  One bad call no longer cuts off every client of a shared daemon.
 
 ### Changed
 
