@@ -125,6 +125,11 @@ func New(cfg Config) *Server {
 // goroutine and takes the whole server process down. Clients send null for a
 // call without arguments, such as a screenshot tool whose arguments all have
 // defaults. Absent arguments are handled correctly, so null becomes absent.
+//
+// Workaround: go-sdk fixed it upstream in 0f18bc76 ("mcp: apply defaults to
+// null tool arguments", #1343), after v1.8.0. Delete this middleware when
+// emcp-go moves to the first go-sdk release that has the fix; keep
+// TestAddTool_NullArgumentsWithDefaults, which guards the behaviour.
 func dropNullArguments(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 		if call, ok := req.(*mcp.CallToolRequest); ok && call.Params != nil &&
