@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-26
+
 ### Added
 
 - Typed tools: `emcp.AddTool[In, Out](s, Tool, TypedToolHandler[In, Out])` over the official
@@ -20,8 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `InferSchema[T]` to start from the inferred schema and add enums, ranges and defaults.
 - `ToolInfo.OutputSchema` and `ToolInfo.Annotations` on the client side.
 - Typed tools accept `"arguments": null` (sent for a call without arguments) also when their
-  schema has defaults: go-sdk v1.8.0 panics on it (fixed upstream in 0f18bc76, #1343, unreleased),
-  so a receiving middleware treats null as absent until emcp-go moves to the next go-sdk release.
+  schema has defaults: go-sdk v1.8.0 panics on it (fixed upstream in 0f18bc76,
+  modelcontextprotocol/go-sdk#1343, unreleased), so a receiving middleware treats null as absent
+  until emcp-go moves to the next go-sdk release.
 - A panic during a tool call, in the handler or in the SDK's argument handling, becomes a tool
   error naming the tool instead of ending the server process; one bad call no longer cuts off
   every client of a shared daemon. The stack goes to `ServerConfig.Logger`.
