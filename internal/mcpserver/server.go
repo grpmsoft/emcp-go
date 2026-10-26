@@ -6,6 +6,7 @@
 package mcpserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -110,12 +111,27 @@ func New(cfg Config) *Server {
 		}
 	}
 
+	srv := mcp.NewServer(&mcp.Implementation{Name: name, Version: version}, opts)
+	srv.AddReceivingMiddleware(dropNullArguments)
 	return &Server{
-		mcpServer: mcp.NewServer(
-			&mcp.Implementation{Name: name, Version: version},
-			opts,
-		),
-		config: cfg,
+		mcpServer: srv,
+		config:    cfg,
+	}
+}
+
+// dropNullArguments treats `"arguments": null` in tools/call as no arguments.
+// The SDK (v1.8.0, mcp/tool.go applySchema) decodes null into a nil map and
+// then writes the schema defaults into it, which panics in the request
+// goroutine and takes the whole server process down. Clients send null for a
+// call without arguments, such as a screenshot tool whose arguments all have
+// defaults. Absent arguments are handled correctly, so null becomes absent.
+func dropNullArguments(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+		if call, ok := req.(*mcp.CallToolRequest); ok && call.Params != nil &&
+			bytes.Equal(bytes.TrimSpace(call.Params.Arguments), []byte("null")) {
+			call.Params.Arguments = nil
+		}
+		return next(ctx, method, req)
 	}
 }
 

@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `InferSchema[T]` to start from the inferred schema and add enums, ranges and defaults.
 - `ToolInfo.OutputSchema` and `ToolInfo.Annotations` on the client side.
 
+### Fixed
+
+- A `tools/call` with `"arguments": null` to a tool whose schema has defaults no longer crashes
+  the server. The SDK (v1.8.0) decoded null into a nil map and panicked writing the defaults into
+  it, in the request goroutine, which ends the process. A receiving middleware now treats null
+  arguments as absent.
+
 ### Changed
 
 - `github.com/google/jsonschema-go` is a direct dependency: `*jsonschema.Schema` appears in the
