@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 
 	"github.com/grpmsoft/emcp-go/internal/mcpclient"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -89,6 +90,9 @@ func (c *Client) ListTools(ctx context.Context) ([]*ToolInfo, error) {
 			Title:       t.Title,
 			Description: t.Description,
 			Annotations: toolAnnotationsFromSDK(t.Annotations),
+			// A copy: the SDK keeps the listed tool on the client, and a
+			// caller changing its Meta must not reach that cached map.
+			Meta: Meta(maps.Clone(t.Meta)),
 		}
 		if m, ok := t.InputSchema.(map[string]any); ok {
 			info.InputSchema = m

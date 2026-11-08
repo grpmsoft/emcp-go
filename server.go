@@ -13,6 +13,7 @@ import (
 
 	emcpgrpc "github.com/grpmsoft/emcp-go/grpc"
 	"github.com/grpmsoft/emcp-go/internal/mcpserver"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -111,16 +112,37 @@ func NewServer(cfg ServerConfig) *Server {
 	}
 }
 
+// ToolOptions carries the optional metadata of a tool registered with
+// AddToolWithOptions.
+type ToolOptions struct {
+	// Annotations are the tool's behaviour hints: read-only, idempotent and
+	// similar. Clients may use them for confirmation prompts.
+	Annotations *ToolAnnotations
+	// Meta is the tool's `_meta` object, sent to clients as is; nil means
+	// none. See the Meta type for what it carries.
+	Meta Meta
+}
+
 // AddTool registers a tool with its handler. The inputSchema is a JSON Schema
 // object (typically map[string]any) describing the tool's expected parameters.
 // Pass nil for tools that accept no arguments.
 func (s *Server) AddTool(name, description string, inputSchema map[string]any, handler ToolHandler) {
-	s.impl.AddTool(name, description, inputSchema, func(ctx context.Context, n string, args map[string]any) (*mcpserver.ToolResult, error) {
+	s.AddToolWithOptions(name, description, inputSchema, handler, ToolOptions{})
+}
+
+// AddToolWithOptions registers a tool like AddTool, with annotations and
+// protocol metadata that are listed in tools/list. Typed tools set the same
+// fields through Tool.
+func (s *Server) AddToolWithOptions(name, description string, inputSchema map[string]any, handler ToolHandler, opts ToolOptions) {
+	s.impl.AddToolWithOptions(name, description, inputSchema, func(ctx context.Context, n string, args map[string]any) (*mcpserver.ToolResult, error) {
 		result, err := handler(ctx, n, args)
 		if err != nil {
 			return nil, err
 		}
 		return toInternalResult(result), nil
+	}, mcpserver.ToolOptions{
+		Annotations: opts.Annotations.toSDK(),
+		Meta:        mcp.Meta(opts.Meta),
 	})
 }
 

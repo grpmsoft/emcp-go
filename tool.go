@@ -33,7 +33,23 @@ type Tool struct {
 	OutputSchema *jsonschema.Schema
 	// Annotations are hints about the tool's behaviour for clients.
 	Annotations *ToolAnnotations
+	// Meta is the tool's `_meta` object, sent to clients as is; nil means
+	// none. See the Meta type for what it carries.
+	Meta Meta
 }
+
+// Meta is a tool's `_meta` object: additional information that the MCP
+// protocol reserves for clients and servers (specification 2025-06-18,
+// "General fields"; JSON field "_meta"). It reaches clients as is, in the
+// tools/list result, and carries client-specific hints. Claude Code, for
+// example, reads "anthropic/alwaysLoad" to make a tool callable before
+// ToolSearch, and "anthropic/maxResultSizeChars"; a specification key, such
+// as "progressToken", is namespaced by the protocol.
+//
+// The values stay a map, not a struct: keys belong to clients this package
+// does not know, and a struct would silently drop them. The official SDK uses
+// the same shape (mcp.Meta), so the maps convert without a copy.
+type Meta map[string]any
 
 // ToolAnnotations are hints about a tool's behaviour (MCP tool annotations).
 // Clients may use them for confirmation prompts; they are not guarantees.
@@ -91,6 +107,7 @@ func AddTool[In, Out any](s *Server, t Tool, h TypedToolHandler[In, Out]) {
 		InputSchema:  t.InputSchema,
 		OutputSchema: t.OutputSchema,
 		Annotations:  t.Annotations.toSDK(),
+		Meta:         mcp.Meta(t.Meta),
 	}, func(ctx context.Context, in In) (*mcpserver.ToolResult, Out, error) {
 		res, out, err := h(ctx, in)
 		if err != nil || res == nil {

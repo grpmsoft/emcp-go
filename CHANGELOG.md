@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Tool `_meta` reaches clients in tools/list: `Tool.Meta` for typed tools and
+  `Server.AddToolWithOptions(name, desc, schema, handler, ToolOptions{Annotations, Meta})` for
+  untyped ones, with `ToolInfo.Meta` on the client side. It carries client-specific hints such
+  as Claude Code's `anthropic/alwaysLoad` (the tool is callable before ToolSearch) and
+  `anthropic/maxResultSizeChars`.
+
 ## [0.2.0] - 2026-10-26
 
 ### Added

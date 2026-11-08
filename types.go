@@ -17,6 +17,10 @@ type ToolInfo struct {
 	OutputSchema map[string]any
 	// Annotations are the tool's behaviour hints; nil when it declares none.
 	Annotations *ToolAnnotations
+	// Meta is the tool's `_meta` object as listed; nil when it declares none.
+	// Like tool arguments, it is a decoded JSON map: numbers arrive as
+	// float64.
+	Meta Meta
 }
 
 // ToolResult is a clean Go representation of an MCP tool call result.
