@@ -62,6 +62,7 @@ func newTypedServer(t *testing.T, cfg ServerConfig) *Server {
 		Description: "greets someone",
 		InputSchema: schema,
 		Annotations: &ToolAnnotations{Title: "Greeter", ReadOnlyHint: true, OpenWorldHint: ptr(false)},
+		Meta:        Meta{"anthropic/alwaysLoad": true},
 	}, func(_ context.Context, in greetIn) (*ToolResult, greetOut, error) {
 		if strings.TrimSpace(in.Name) == "" {
 			return nil, greetOut{}, errNoName
@@ -160,9 +161,103 @@ func TestAddTool_ListsSchemasAndAnnotations(t *testing.T) {
 		if a == nil || a.Title != "Greeter" || !a.ReadOnlyHint || a.OpenWorldHint == nil || *a.OpenWorldHint {
 			t.Errorf("annotations = %+v, want the title, readOnly and a closed world", a)
 		}
+		if greet.Meta["anthropic/alwaysLoad"] != true {
+			t.Errorf("meta = %v, want anthropic/alwaysLoad", greet.Meta)
+		}
 
-		if byName["echo"] == nil || byName["echo"].OutputSchema != nil || byName["echo"].Annotations != nil {
-			t.Errorf("untyped echo = %+v, want it listed without output schema or annotations", byName["echo"])
+		if byName["echo"] == nil || byName["echo"].OutputSchema != nil || byName["echo"].Annotations != nil || byName["echo"].Meta != nil {
+			t.Errorf("untyped echo = %+v, want it listed without output schema, annotations or meta", byName["echo"])
+		}
+	})
+}
+
+// TestAddToolWithOptions_MetaIsDetached checks that the registered _meta map
+// is copied: a caller changing its own map after registration does not reach
+// tools/list, and changing a returned ToolInfo.Meta does not reach the SDK's
+// cached listing.
+func TestAddToolWithOptions_MetaIsDetached(t *testing.T) {
+	srv := NewServer(ServerConfig{Name: "meta-copy", Version: "0.2.0"})
+	meta := Meta{"anthropic/alwaysLoad": true}
+	srv.AddToolWithOptions("scan", "scans the workspace", nil,
+		func(_ context.Context, _ string, _ map[string]any) (*ToolResult, error) {
+			return TextResult("ok"), nil
+		}, ToolOptions{Meta: meta})
+	meta["added/later"] = true
+
+	client, cleanup := newHTTPServerAndClient(t, srv)
+	defer cleanup()
+
+	tools, err := client.ListTools(callCtx(t))
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	if _, ok := tools[0].Meta["added/later"]; ok {
+		t.Error("tools/list saw a key added to the caller's map after registration")
+	}
+	if tools[0].Meta["anthropic/alwaysLoad"] != true {
+		t.Errorf("meta = %v, want anthropic/alwaysLoad", tools[0].Meta)
+	}
+
+	tools[0].Meta["injected"] = true
+	again, err := client.ListTools(callCtx(t))
+	if err != nil {
+		t.Fatalf("second ListTools: %v", err)
+	}
+	if _, ok := again[0].Meta["injected"]; ok {
+		t.Error("ToolInfo.Meta aliases the SDK's cached listing")
+	}
+}
+
+// TestAddToolWithOptions_PanicsOnUnencodableMeta checks that a _meta value
+// JSON cannot encode fails at registration instead of breaking tools/list
+// for every client.
+func TestAddToolWithOptions_PanicsOnUnencodableMeta(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("AddToolWithOptions did not panic on _meta that JSON cannot encode")
+		}
+	}()
+	srv := NewServer(ServerConfig{Name: "bad-meta", Version: "0.2.0"})
+	srv.AddToolWithOptions("bad", "", nil,
+		func(_ context.Context, _ string, _ map[string]any) (*ToolResult, error) {
+			return TextResult("ok"), nil
+		}, ToolOptions{Meta: Meta{"bad": make(chan int)}})
+}
+
+// TestAddToolWithOptions_ListsAnnotationsAndMeta checks the untyped path:
+// AddToolWithOptions attaches annotations and _meta, which reach the client
+// in tools/list.
+func TestAddToolWithOptions_ListsAnnotationsAndMeta(t *testing.T) {
+	srv := NewServer(ServerConfig{Name: "opts", Version: "0.2.0"})
+	srv.AddToolWithOptions("scan", "scans the workspace", nil,
+		func(_ context.Context, _ string, _ map[string]any) (*ToolResult, error) {
+			return TextResult("ok"), nil
+		}, ToolOptions{
+			Annotations: &ToolAnnotations{ReadOnlyHint: true},
+			Meta: Meta{
+				"anthropic/alwaysLoad":         true,
+				"anthropic/maxResultSizeChars": 50000,
+			},
+		})
+
+	typedTransports(t, srv, func(t *testing.T, client *Client) {
+		tools, err := client.ListTools(callCtx(t))
+		if err != nil {
+			t.Fatalf("ListTools: %v", err)
+		}
+		if len(tools) != 1 {
+			t.Fatalf("tools = %v, want scan alone", tools)
+		}
+		scan := tools[0]
+		if a := scan.Annotations; a == nil || !a.ReadOnlyHint {
+			t.Errorf("annotations = %+v, want readOnly", a)
+		}
+		if scan.Meta["anthropic/alwaysLoad"] != true {
+			t.Errorf("meta = %v, want anthropic/alwaysLoad", scan.Meta)
+		}
+		// JSON numbers arrive as float64 whatever the transport.
+		if scan.Meta["anthropic/maxResultSizeChars"] != float64(50000) {
+			t.Errorf("meta = %v, want anthropic/maxResultSizeChars 50000", scan.Meta)
 		}
 	})
 }

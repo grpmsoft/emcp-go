@@ -108,7 +108,10 @@ http.ListenAndServe(":8080", mux)
 - a validation failure or a handler error reaches the client as a tool error (`IsError`) with the
   reason, never as a protocol failure;
 - `Tool.Annotations` carries the MCP behaviour hints (read-only, destructive, idempotent, open
-  world).
+  world);
+- `Tool.Meta` is the tool's `_meta` object, listed to clients as is. It carries client-specific
+  hints: Claude Code reads `anthropic/alwaysLoad` to make a tool callable before ToolSearch, and
+  `anthropic/maxResultSizeChars`.
 
 Struct tags carry only descriptions. For enums, ranges and defaults start from the inferred
 schema and set them:
@@ -124,7 +127,11 @@ Schemas are `*jsonschema.Schema` from `github.com/google/jsonschema-go`, the pac
 SDK uses as well; it is the one type from outside emcp-go in the public API.
 
 The untyped `Server.AddTool(name, desc, schema, handler)` with `map[string]any` arguments stays
-for dynamic tools whose shape is known only at run time.
+for dynamic tools whose shape is known only at run time. `Server.AddToolWithOptions` registers
+such a tool with `ToolOptions{Annotations, Meta}`.
+
+The experimental `grpc/typed` transport has its own proto with no annotations or `_meta` fields,
+so it carries neither.
 
 A client reads a structured result into its own type: `ToolResult.StructuredContent` is raw JSON
 (`json.RawMessage`), whatever the tool's `Out` is (object, array or primitive):
@@ -226,6 +233,7 @@ The `grpc/typed/` package provides an **experimental** alternative with native p
 | `emcp.AddTool[In, Out]` | `(s, Tool, TypedToolHandler[In, Out])` | Register a typed tool (recommended) |
 | `emcp.InferSchema[T]` | `() (*jsonschema.Schema, error)` | Schema inferred for T, to tune |
 | `AddTool` | `(name, desc, schema, handler)` | Register an untyped tool (`map[string]any` args) |
+| `AddToolWithOptions` | `(name, desc, schema, handler, ToolOptions)` | Untyped tool with annotations and `_meta` |
 | `HTTPHandler` | `() http.Handler` | Streamable HTTP handler |
 | `GRPCHandler` | `() *grpc.GRPCHandler` | gRPC stream handler |
 | `Close` | `() error` | Release resources |

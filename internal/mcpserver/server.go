@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"runtime/debug"
 	"sync"
@@ -198,11 +199,43 @@ func dropNullArguments(next mcp.MethodHandler) mcp.MethodHandler {
 	}
 }
 
+// ToolOptions carries the optional metadata of a tool registered with
+// AddToolWithOptions.
+type ToolOptions struct {
+	// Annotations are the tool's behaviour hints (MCP tool annotations).
+	Annotations *mcp.ToolAnnotations
+	// Meta is the tool's `_meta` object, passed to clients as is.
+	Meta mcp.Meta
+}
+
 // AddTool registers a tool with the given handler. The inputSchema is passed
 // through to the SDK as-is (it must be a valid JSON Schema object, typically
 // map[string]any). If the schema is nil or missing "type", it is normalized
 // to {"type": "object"} to prevent SDK panics.
 func (s *Server) AddTool(name, description string, inputSchema map[string]any, handler ToolHandler) {
+	s.AddToolWithOptions(name, description, inputSchema, handler, ToolOptions{})
+}
+
+// normalizeMeta returns a private copy of m and checks that JSON can encode
+// it. The copy keeps a caller's later change to the map away from tools/list
+// encoding, which would otherwise race with it. A value JSON cannot encode (a
+// channel, a function) would fail tools/list for every client of the server,
+// so it is a programming error found at registration, like a bad schema.
+func normalizeMeta(name string, m mcp.Meta) mcp.Meta {
+	if m == nil {
+		return nil
+	}
+	meta := maps.Clone(m)
+	if _, err := json.Marshal(meta); err != nil {
+		panic(fmt.Sprintf("emcp: tool %q: _meta cannot be encoded as JSON: %v", name, err))
+	}
+	return meta
+}
+
+// AddToolWithOptions registers a tool like AddTool, with annotations and
+// protocol metadata that are listed in tools/list. It panics when a _meta
+// value cannot be encoded as JSON.
+func (s *Server) AddToolWithOptions(name, description string, inputSchema map[string]any, handler ToolHandler, opts ToolOptions) {
 	// The SDK requires InputSchema to have "type": "object". When the caller
 	// passes nil or a schema without "type", normalize it to prevent panics.
 	schema := normalizeSchema(inputSchema)
@@ -211,6 +244,8 @@ func (s *Server) AddTool(name, description string, inputSchema map[string]any, h
 		Name:        name,
 		Description: description,
 		InputSchema: schema,
+		Annotations: opts.Annotations,
+		Meta:        normalizeMeta(name, opts.Meta),
 	}
 
 	// Use the low-level Server.AddTool (non-generic) which accepts mcp.ToolHandler.

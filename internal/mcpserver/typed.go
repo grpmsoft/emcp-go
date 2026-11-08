@@ -20,6 +20,7 @@ type TypedTool struct {
 	InputSchema  *jsonschema.Schema
 	OutputSchema *jsonschema.Schema
 	Annotations  *mcp.ToolAnnotations
+	Meta         mcp.Meta
 }
 
 // TypedHandler is the internal form of a typed tool handler.
@@ -38,6 +39,7 @@ func AddTypedTool[In, Out any](s *Server, t TypedTool, h TypedHandler[In, Out]) 
 		Title:       t.Title,
 		Description: t.Description,
 		Annotations: t.Annotations,
+		Meta:        normalizeMeta(t.Name, t.Meta),
 	}
 	// The SDK fields are interfaces: a nil *jsonschema.Schema stored in them
 	// would read as a provided schema, so only set the ones given.
