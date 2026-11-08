@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.0] - 2026-11-08
 
 ### Added
 
@@ -13,7 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `Server.AddToolWithOptions(name, desc, schema, handler, ToolOptions{Annotations, Meta})` for
   untyped ones, with `ToolInfo.Meta` on the client side. It carries client-specific hints such
   as Claude Code's `anthropic/alwaysLoad` (the tool is callable before ToolSearch) and
-  `anthropic/maxResultSizeChars`.
+  `anthropic/maxResultSizeChars`. The registered map is copied, so changing it afterwards cannot
+  race with `tools/list`, and a value JSON cannot encode panics at registration instead of
+  failing every listing.
 
 ## [0.2.0] - 2026-10-26
 

@@ -40,6 +40,10 @@ Two capabilities: (1) Unified Client connecting via HTTP/gRPC/stdio with one New
   tool errors
 - InferSchema[T]() (*jsonschema.Schema, error) -- start point for enums, ranges, defaults
 - Server.AddTool(name, description, inputSchema, handler) -- untyped, map[string]any args
+- Server.AddToolWithOptions(name, description, inputSchema, handler, ToolOptions) -- untyped with
+  Annotations and Meta
+- Meta -- tool `_meta` object (map[string]any): client-specific hints, e.g. Claude Code's
+  anthropic/alwaysLoad; ToolOptions{Annotations *ToolAnnotations, Meta Meta}
 - Server.HTTPHandler() http.Handler -- Streamable HTTP
 - Server.GRPCHandler() *grpc.GRPCHandler -- register with grpc.Server
 - Server.Close() error
@@ -59,13 +63,13 @@ func(ctx context.Context, name string, args map[string]any) (*ToolResult, error)
 ### Typed tools
 
 - Tool -- Name, Title, Description, InputSchema/OutputSchema (*jsonschema.Schema, nil = inferred),
-  Annotations
+  Annotations, Meta
 - ToolAnnotations -- Title, ReadOnlyHint, DestructiveHint (*bool), IdempotentHint, OpenWorldHint (*bool)
 - TypedToolHandler[In, Out] -- func(ctx, in In) (*ToolResult, Out, error)
 
 ### Result Types
 
-- ToolInfo -- Name, Title, Description, InputSchema, OutputSchema, Annotations
+- ToolInfo -- Name, Title, Description, InputSchema, OutputSchema, Annotations, Meta
 - ToolResult -- Content []ContentItem, StructuredContent json.RawMessage, IsError bool
 - ContentItem -- Type (text/image/audio), Text, MIMEType, Data
 - TextResult(text) -- convenience: single text content item
