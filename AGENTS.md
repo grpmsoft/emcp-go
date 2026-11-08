@@ -24,11 +24,12 @@ Not a standalone MCP implementation. Not a daemon manager. Not middleware
 ```
 emcp.go         -- Client: NewClient, ListTools, CallTool, Ping, Close
                    convertCallToolResult, convertContent
-server.go       -- Server: NewServer, AddTool, HTTPHandler, GRPCHandler, Close
+server.go       -- Server: NewServer, AddTool, AddToolWithOptions, ToolOptions,
+                   HTTPHandler, GRPCHandler, Close
                    TextResult, ErrorResult, toInternalResult
 config.go       -- Config (Endpoint, PIDFile, Transport, Command, Args,
                    BearerToken, Timeout), Transport enum
-tool.go         -- typed tools: AddTool[In, Out], Tool, ToolAnnotations,
+tool.go         -- typed tools: AddTool[In, Out], Tool, ToolAnnotations, Meta,
                    TypedToolHandler, InferSchema
 types.go        -- ToolInfo, ToolResult, ContentItem
 discovery.go    -- DaemonInfo, ReadPIDFile, ErrPIDFileNotFound, ErrPIDFileEmpty

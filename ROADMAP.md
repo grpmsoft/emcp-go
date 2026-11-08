@@ -1,6 +1,14 @@
 # Roadmap
 
-## v0.2.0 (current)
+## v0.3.0 (current)
+
+v0.3.0 adds tool `_meta`: `Tool.Meta` on the typed path and
+`Server.AddToolWithOptions` with `ToolOptions{Annotations, Meta}` on the untyped one, listed to
+clients as the MCP `_meta` object (`ToolInfo.Meta` on the client side). It carries client-specific
+hints such as Claude Code's `anthropic/alwaysLoad` (a tool callable before ToolSearch) and
+`anthropic/maxResultSizeChars`.
+
+## v0.2.0
 
 See [CHANGELOG.md](CHANGELOG.md) for full feature list.
 
